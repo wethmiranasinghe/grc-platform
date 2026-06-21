@@ -58,10 +58,10 @@ func HasPrivilege(ctx context.Context, priv string) bool {
 // RequirePrivilege writes a 403 JSON response and returns false when the user
 // lacks the given privilege. Use it as an early-return guard in handlers:
 //
-//	if !auth.RequirePrivilege(w, r.Context(), privilege.ApproveRisk) {
+//	if !auth.RequirePrivilege(r.Context(), w, privilege.ApproveRisk) {
 //	    return
 //	}
-func RequirePrivilege(w http.ResponseWriter, ctx context.Context, priv string) bool {
+func RequirePrivilege(ctx context.Context, w http.ResponseWriter, priv string) bool {
 	if HasPrivilege(ctx, priv) {
 		return true
 	}

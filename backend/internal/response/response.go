@@ -17,10 +17,12 @@
 package response
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/wso2-open-operations/grc-platform/backend/internal/apierror"
@@ -89,7 +91,8 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, v any) error {
 }
 
 // MapServiceError translates a repository or service error to an HTTP response.
-func MapServiceError(w http.ResponseWriter, err error, fallbackMsg string) {
+// ctx is used to attach the correlation ID to any logged errors.
+func MapServiceError(ctx context.Context, w http.ResponseWriter, err error, fallbackMsg string) {
 	var apiErr *apierror.Error
 	if errors.As(err, &apiErr) {
 		switch apiErr.StatusCode {
@@ -102,9 +105,11 @@ func MapServiceError(w http.ResponseWriter, err error, fallbackMsg string) {
 		case http.StatusConflict, http.StatusUnprocessableEntity:
 			WriteError(w, apiErr.StatusCode, apiErr.Body)
 		default:
+			slog.ErrorContext(ctx, "unhandled service error", "err", err)
 			WriteError(w, http.StatusInternalServerError, fallbackMsg)
 		}
 		return
 	}
+	slog.ErrorContext(ctx, "unhandled service error", "err", err)
 	WriteError(w, http.StatusInternalServerError, fallbackMsg)
 }

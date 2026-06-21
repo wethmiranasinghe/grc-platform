@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -38,7 +39,11 @@ import (
 func main() {
 	middleware.ConfigureLogger()
 
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("failed to load configuration", "err", err)
+		os.Exit(1)
+	}
 
 	sqlDB, err := db.Connect(cfg.DB.DSN)
 	if err != nil {
@@ -78,15 +83,15 @@ func main() {
 	audithandler.RegisterRoutes(mux, audithandler.Deps{})
 
 	handler := middleware.CorrelationID(
-		middleware.Auth(middleware.Config{
-			JWKSEndpoint:          cfg.Auth.JWKSEndpoint,
-			Issuer:                cfg.Auth.Issuer,
-			Audience:              cfg.Auth.Audience,
-			ClockSkew:             cfg.Auth.ClockSkew,
-			TokenValidatorEnabled: cfg.Auth.TokenValidatorEnabled,
-			PrivilegeStore:        privStore,
-		})(
-			middleware.Logger(mux),
+		middleware.Logger(
+			middleware.Auth(middleware.Config{
+				JWKSEndpoint:          cfg.Auth.JWKSEndpoint,
+				Issuer:                cfg.Auth.Issuer,
+				Audience:              cfg.Auth.Audience,
+				ClockSkew:             cfg.Auth.ClockSkew,
+				TokenValidatorEnabled: cfg.Auth.TokenValidatorEnabled,
+				PrivilegeStore:        privStore,
+			})(mux),
 		),
 	)
 
@@ -109,7 +114,7 @@ func main() {
 	defer stop()
 
 	go func() {
-		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server exited unexpectedly", "err", err)
 			os.Exit(1)
 		}
