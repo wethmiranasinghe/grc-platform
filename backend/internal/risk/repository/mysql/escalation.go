@@ -33,5 +33,5 @@ func NewEscalationRepository(db *sql.DB) repository.EscalationRepository {
 
 func (r *escalationRepository) List(ctx context.Context, riskID int) ([]*model.Escalation, error) {
 	// TODO: implement risk_escalation SELECT
-	return nil, nil
+	return nil, errNotImplemented
 }

@@ -39,8 +39,17 @@ export default function EvidenceAttachments({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const matchesAccept = (file: File): boolean => {
+    if (!accept) return true;
+    return accept.split(",").map(s => s.trim().toLowerCase()).some(pattern => {
+      if (pattern.startsWith(".")) return file.name.toLowerCase().endsWith(pattern);
+      if (pattern.endsWith("/*")) return file.type.startsWith(pattern.slice(0, -1));
+      return file.type === pattern;
+    });
+  };
+
   const addFiles = (incoming: FileList | File[]): void => {
-    const newFiles = Array.from(incoming);
+    const newFiles = Array.from(incoming).filter(matchesAccept);
     if (newFiles.length) {
       onChange([...value, ...newFiles.map((f) => ({ file: f, note: "" }))]);
     }

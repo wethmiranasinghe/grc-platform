@@ -141,7 +141,7 @@ func (c *jwksCache) refresh() error {
 
 	next := make(map[string]*rsa.PublicKey, len(doc.Keys))
 	for _, k := range doc.Keys {
-		if k.Kty != "RSA" || k.N == "" || k.E == "" {
+		if k.Kid == "" || k.Kty != "RSA" || k.N == "" || k.E == "" {
 			continue
 		}
 		pub, err := rsaPublicKeyFromJWK(k.N, k.E)
@@ -180,6 +180,9 @@ func rsaPublicKeyFromJWK(nB64, eB64 string) (*rsa.PublicKey, error) {
 	e := 0
 	for _, b := range eBytes {
 		e = e<<8 | int(b)
+	}
+	if e < 3 || e%2 == 0 {
+		return nil, fmt.Errorf("invalid RSA exponent: %d", e)
 	}
 	return &rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: e}, nil
 }

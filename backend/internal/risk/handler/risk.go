@@ -103,6 +103,18 @@ func validateCreateRiskRequest(req model.CreateRiskRequest) error {
 	if req.RiskDescription == "" {
 		return errorf("risk_description is required")
 	}
+	if req.RiskIdentifiedDate == "" {
+		return errorf("risk_identified_date is required")
+	}
+	if req.ImpactDescription == "" {
+		return errorf("impact_description is required")
+	}
+	if req.ImplementationDate == "" {
+		return errorf("implementation_date is required")
+	}
+	if req.ReassessmentDate == "" {
+		return errorf("reassessment_date is required")
+	}
 	if req.SourceRegisterID <= 0 {
 		return errorf("source_register_id is required")
 	}

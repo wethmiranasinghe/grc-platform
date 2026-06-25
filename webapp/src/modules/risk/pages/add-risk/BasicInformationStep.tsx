@@ -482,7 +482,9 @@ export default function BasicInformationStep({
             )}
           />
 
-          {/* Risk Assigned To */}
+          {/* Risk Assigned To — intentionally labelled "Assigned To" in the UI for user clarity,
+               even though the form field is `assignedBy` and the backend column is `assigner_id`.
+               The schema name was kept as designed; only the display label differs. */}
           <Controller
             name="assignedBy"
             control={control}

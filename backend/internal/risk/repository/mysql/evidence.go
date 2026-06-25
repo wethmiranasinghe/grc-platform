@@ -33,15 +33,15 @@ func NewRiskEvidenceRepository(db *sql.DB) repository.RiskEvidenceRepository {
 
 func (r *riskEvidenceRepository) List(ctx context.Context, riskID int) ([]*model.RiskEvidence, error) {
 	// TODO: implement
-	return nil, nil
+	return nil, errNotImplemented
 }
 
 func (r *riskEvidenceRepository) Create(ctx context.Context, riskID int, fileName, filePath, note, evidenceType, createdBy string) (*model.RiskEvidence, error) {
 	// TODO: INSERT INTO risk_evidence
-	return nil, nil
+	return nil, errNotImplemented
 }
 
 func (r *riskEvidenceRepository) Delete(ctx context.Context, evidenceID int) error {
 	// TODO: DELETE FROM risk_evidence WHERE id = ?
-	return nil
+	return errNotImplemented
 }

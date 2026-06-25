@@ -64,10 +64,10 @@ func (r *teamRepository) List(ctx context.Context, filter model.ListTeamsFilter)
 
 func (r *teamRepository) Create(ctx context.Context, req model.CreateTeamRequest, createdBy string) (*model.Team, error) {
 	// TODO: implement risk_team INSERT
-	return nil, nil
+	return nil, errNotImplemented
 }
 
 func (r *teamRepository) Update(ctx context.Context, id int, req model.UpdateTeamRequest, updatedBy string) error {
 	// TODO: implement risk_team UPDATE
-	return nil
+	return errNotImplemented
 }
