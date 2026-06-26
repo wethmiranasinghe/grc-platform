@@ -15,53 +15,58 @@
 // under the License.
 
 // Package repository defines the data-access contracts for the Audit Hub module.
-// Add methods to each interface as handlers are implemented.
 package repository
 
+import (
+	"context"
+
+	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/model"
+)
+
 // AuditRepository is the data-access contract for audit engagements.
-// TODO: add CRUD and status-transition methods based on AUDIT_MODULE_DESIGN.md
-type AuditRepository interface{}
+type AuditRepository interface {
+	List(ctx context.Context) ([]*model.Audit, error)
+	GetByID(ctx context.Context, id int) (*model.Audit, error)
+	Create(ctx context.Context, req model.CreateAuditRequest, createdBy string) (*model.Audit, error)
+	Update(ctx context.Context, id int, req model.UpdateAuditRequest, updatedBy string) error
+}
 
 // FrameworkRepository is the data-access contract for audit frameworks.
-// TODO: add CRUD methods
-type FrameworkRepository interface{}
+type FrameworkRepository interface {
+	List(ctx context.Context) ([]*model.AuditFramework, error)
+	GetByID(ctx context.Context, id int) (*model.AuditFramework, error)
+	Create(ctx context.Context, req model.CreateFrameworkRequest, createdBy string) (*model.AuditFramework, error)
+}
 
 // ProductRepository is the data-access contract for audit products.
-// TODO: add CRUD methods
-type ProductRepository interface{}
+type ProductRepository interface {
+	List(ctx context.Context) ([]*model.AuditProduct, error)
+	GetByID(ctx context.Context, id int) (*model.AuditProduct, error)
+	Create(ctx context.Context, req model.CreateProductRequest, createdBy string) (*model.AuditProduct, error)
+}
 
 // ControlRepository is the data-access contract for audit controls.
-// TODO: add CRUD and status-transition methods
-type ControlRepository interface{}
+type ControlRepository interface {
+	List(ctx context.Context, auditID int) ([]*model.AuditControl, error)
+	GetByID(ctx context.Context, auditID, controlID int) (*model.AuditControl, error)
+	Create(ctx context.Context, auditID int, req model.AddControlRequest, createdBy string) (*model.AuditControl, error)
+	BulkCreate(ctx context.Context, auditID int, reqs []model.AddControlRequest, createdBy string) ([]*model.AuditControl, error)
+	Update(ctx context.Context, auditID, controlID int, req model.UpdateControlRequest, updatedBy string) error
+	UpdateStatus(ctx context.Context, auditID, controlID int, status string, comment *string, updatedBy string) error
+	Delete(ctx context.Context, auditID, controlID int) error
+}
 
-// PopulationRepository is the data-access contract for audit population samples.
-// TODO: add CRUD methods
+// UserRepository is the data-access contract for the shared user list (owner/auditor dropdowns).
+type UserRepository interface {
+	List(ctx context.Context) ([]*model.UserRef, error)
+}
+
+// These remain empty — add methods as their handlers are implemented.
 type PopulationRepository interface{}
-
-// EvidenceRepository is the data-access contract for audit evidence and file attachments.
-// TODO: add CRUD and file-link methods
 type EvidenceRepository interface{}
-
-// CommentRepository is the data-access contract for audit comments.
-// TODO: add CRUD methods
 type CommentRepository interface{}
-
-// ReviewRepository is the data-access contract for auditor review decisions.
-// TODO: add CRUD methods
 type ReviewRepository interface{}
-
-// AssignmentRepository is the data-access contract for auditor assignments.
-// TODO: add CRUD methods
 type AssignmentRepository interface{}
-
-// NotificationRepository is the data-access contract for audit notifications.
-// TODO: add list and mark-read methods
 type NotificationRepository interface{}
-
-// AIValidationLogRepository is the data-access contract for AI validation log records.
-// TODO: add insert and list methods
 type AIValidationLogRepository interface{}
-
-// TrailRepository is the data-access contract for the immutable audit trail.
-// TODO: add insert and list methods
 type TrailRepository interface{}

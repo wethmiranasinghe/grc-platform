@@ -17,7 +17,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuthApiClient } from "@hooks/useAuthApiClient";
 import { BACKEND_BASE_URL } from "@config/apiConfig";
-import { MOCK_AUDIT_LIST } from "@modules/audit/mock/auditMock";
 import type { AuditListResponse } from "@modules/audit/types/audit";
 
 export const AUDITS_QUERY_KEY = ["audits"] as const;
@@ -28,9 +27,6 @@ export function useGetAudits() {
   return useQuery({
     queryKey: AUDITS_QUERY_KEY,
     queryFn: async (): Promise<AuditListResponse> => {
-      if (!BACKEND_BASE_URL || window.config?.GRC_PLATFORM_MOCK_AUTH === true) {
-        return MOCK_AUDIT_LIST;
-      }
       const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/audits`);
       if (!res.ok) throw new Error(`Failed to load audits (${res.status})`);
       return res.json() as Promise<AuditListResponse>;

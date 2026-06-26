@@ -107,6 +107,87 @@ Open [http://localhost:3000](http://localhost:3000). The root path redirects to
   keys. Register a **Single Page Application** in Asgardeo and align its
   callback/logout URLs with the redirect keys above.
 
+## Role-Based Access Control (RBAC)
+
+Access is enforced at the Go backend and gated in the UI by role claims from Asgardeo. The table below defines what each role can do inside the Audit Hub.
+
+| Capability | Compliance Admin | Compliance Team | Auditor POC | Viewer |
+|---|:---:|:---:|:---:|:---:|
+| View audits and controls | ✅ | ✅ | ✅ | ✅ |
+| Create / edit audits | ✅ | — | — | — |
+| Create / edit controls | ✅ | — | — | — |
+| Set control owner, due date, auditor POC | ✅ | — | — | — |
+| Submit evidence for a control | ✅ | ✅ | — | — |
+| Add comments on a control | ✅ | ✅ | ✅ | — |
+| Review submitted evidence (compliance review) | ✅ | — | — | — |
+| Approve / reject / request resubmission (auditor review) | — | — | ✅ | — |
+| Archive / delete audits | ✅ | — | — | — |
+
+**Key decisions:**
+
+- **Compliance Admin** is the only role that creates and configures controls (sets owners, due dates, auditor POC). Controls are set up when an audit is created, not by the compliance team.
+- **Compliance Team** members are assigned as process owners by the admin. Their scope is limited to submitting evidence and adding comments on controls assigned to them.
+
+## Control Workflow
+
+Controls follow different status lifecycles depending on their requirement type. Both flows share the same evidence review cycle at the end.
+
+### Design (`requirementType = DESIGN`)
+
+Design controls require the compliance team to upload a document proving a policy or configuration is in place.
+
+```
+EVIDENCE_PENDING
+  → EVIDENCE_INTERNAL_REVIEW    (team submits evidence)
+  → EVIDENCE_UNDER_VALIDATION   (internal admin approves)
+  → COMPLETE                    ✅
+  ↩ EVIDENCE_PENDING            (internal admin OR auditor rejects at any review stage)
+```
+
+**Actors:**
+- **Compliance Team** — submits evidence when status is `EVIDENCE_PENDING`
+- **Internal Compliance Admin** — reviews at `EVIDENCE_INTERNAL_REVIEW`; approve → `EVIDENCE_UNDER_VALIDATION`; reject → `EVIDENCE_PENDING`
+- **External Auditor** — validates at `EVIDENCE_UNDER_VALIDATION`; approve → `COMPLETE`; reject → `EVIDENCE_PENDING`
+
+### Operational Effectiveness (`requirementType = OE`)
+
+OE controls require the team to first provide a full **population list**. The auditor selects a statistical **sample** from that list, then the team submits evidence only for the sampled items.
+
+**Population cycle:**
+```
+POPULATION_PENDING
+  → POPULATION_INTERNAL_REVIEW    (team submits population file)
+  → POPULATION_UNDER_VALIDATION   (internal admin approves)
+  → SUBMITTED_SAMPLE              ✅ (auditor accepts + selects samples)
+  ↩ POPULATION_PENDING            (internal admin rejects)
+  ↩ POPULATION_NEED_CLARIFICATION (auditor rejects → team resubmits → POPULATION_INTERNAL_REVIEW)
+```
+
+**Evidence cycle (after `SUBMITTED_SAMPLE`):**
+```
+SUBMITTED_SAMPLE
+  → EVIDENCE_INTERNAL_REVIEW    (team submits per-sample evidence)
+  → EVIDENCE_UNDER_VALIDATION   (internal admin approves)
+  → COMPLETE                    ✅
+  ↩ EVIDENCE_PENDING            (internal admin OR auditor rejects → team resubmits → EVIDENCE_INTERNAL_REVIEW)
+```
+
+**Status colour reference:**
+
+| Status | Used by | Colour |
+|---|---|---|
+| Population Pending | OE | Grey |
+| Population Internal Review | OE | Amber |
+| Population Under Validation | OE | Purple |
+| Population Need Clarification | OE | Red |
+| Submitted Sample | OE | Cyan |
+| Evidence Pending | Both | Orange |
+| Evidence Internal Review | Both | Amber |
+| Evidence Under Validation | Both | Purple |
+| Complete | Both | Green |
+
+- **Auditor POC** is assigned per control by the compliance admin. They perform the external validation step.
+
 ## Project Structure
 
 ```text

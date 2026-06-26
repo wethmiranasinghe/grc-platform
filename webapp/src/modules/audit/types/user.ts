@@ -15,14 +15,14 @@
 // under the License.
 
 /**
- * WSO2 user returned by GET /api/v1/users.
- * Backend maps this from Asgardeo SCIM2 /scim2/Users response.
+ * User returned by GET /api/v1/audit/users.
+ * Currently sourced from the MySQL `user` table.
+ * When Asgardeo SCIM2 is integrated, `asgardeoId: string` will be added alongside.
  */
 export interface AuditUser {
-  /** Asgardeo SCIM2 user ID (UUID). */
-  id: string;
+  id: number;
   displayName: string;
   email: string | null;
-  /** Thumbnail photo URL from Asgardeo, or null if not set. */
+  /** Thumbnail photo URL, or null if not set. */
   profileUrl: string | null;
 }

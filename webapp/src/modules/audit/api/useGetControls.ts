@@ -17,7 +17,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuthApiClient } from "@hooks/useAuthApiClient";
 import { BACKEND_BASE_URL } from "@config/apiConfig";
-import { getMockControls } from "@modules/audit/mock/auditMock";
 import type { ControlListResponse } from "@modules/audit/types/audit";
 
 export const controlsQueryKey = (auditId: number) =>
@@ -29,9 +28,6 @@ export function useGetControls(auditId: number) {
   return useQuery({
     queryKey: controlsQueryKey(auditId),
     queryFn: async (): Promise<ControlListResponse> => {
-      if (!BACKEND_BASE_URL || window.config?.GRC_PLATFORM_MOCK_AUTH === true) {
-        return getMockControls(auditId);
-      }
       const res = await authFetch(
         `${BACKEND_BASE_URL}/api/v1/audits/${auditId}/controls`,
       );

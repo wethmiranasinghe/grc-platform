@@ -17,28 +17,6 @@
 import { Avatar, Tooltip } from "@mui/material";
 import type { JSX } from "react";
 
-// Consistent palette — each name always gets the same color
-const PALETTE = [
-  "#64b5f6",
-  "#81c784",
-  "#ffb74d",
-  "#ce93d8",
-  "#4dd0e1",
-  "#ef9a9a",
-  "#9fa8da",
-  "#80cbc4",
-  "#f48fb1",
-  "#fff176",
-];
-
-function nameToColor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return PALETTE[Math.abs(hash) % PALETTE.length];
-}
-
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) {
@@ -61,14 +39,7 @@ export default function UserAvatar({ name, src, size = 28 }: UserAvatarProps): J
       <Avatar
         src={src ?? undefined}
         alt={name}
-        sx={{
-          width: size,
-          height: size,
-          fontSize: size * 0.38,
-          fontWeight: 600,
-          bgcolor: src ? undefined : nameToColor(name),
-          flexShrink: 0,
-        }}
+        sx={{ width: size, height: size, fontSize: size * 0.38, flexShrink: 0 }}
       >
         {!src && getInitials(name)}
       </Avatar>

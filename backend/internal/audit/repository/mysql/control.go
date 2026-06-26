@@ -17,8 +17,13 @@
 package mysql
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
+	"strings"
+	"time"
 
+	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/model"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/repository"
 )
 
@@ -29,4 +34,241 @@ func NewControlRepository(db *sql.DB) repository.ControlRepository {
 	return &controlRepository{db: db}
 }
 
-// TODO: implement audit_control CRUD and status transitions
+// controlSelectCols is the SELECT list used in both List and GetByID.
+const controlSelectCols = `
+  c.id, c.audit_id,
+  c.owner_id,   u_owner.display_name AS owner_name,
+  c.team_id,    t.name               AS team_name,
+  c.auditor_id, u_aud.display_name   AS auditor_name,
+  c.control_number, c.description, c.evidence_requirement,
+  c.requirement_type, c.control_type, c.scope,
+  DATE_FORMAT(c.due_date, '%Y-%m-%d') AS due_date,
+  c.status,
+  c.sample_reference, c.sample_file_url, c.sample_file_name,
+  c.comments, c.is_manually_added,
+  (c.due_date IS NOT NULL AND c.due_date < CURDATE() AND c.status != 'COMPLETE') AS is_overdue,
+  c.created_at, c.updated_at`
+
+const controlFromClause = `
+FROM audit_control c
+LEFT JOIN ` + "`user`" + ` u_owner ON u_owner.id = c.owner_id
+LEFT JOIN audit_team t          ON t.id    = c.team_id
+LEFT JOIN ` + "`user`" + ` u_aud   ON u_aud.id   = c.auditor_id`
+
+func (r *controlRepository) List(ctx context.Context, auditID int) ([]*model.AuditControl, error) {
+	q := "SELECT" + controlSelectCols + controlFromClause + " WHERE c.audit_id = ? ORDER BY c.control_number"
+	rows, err := r.db.QueryContext(ctx, q, auditID)
+	if err != nil {
+		return nil, fmt.Errorf("control.List: %w", err)
+	}
+	defer rows.Close()
+
+	var controls []*model.AuditControl
+	for rows.Next() {
+		c, err := scanControl(rows)
+		if err != nil {
+			return nil, fmt.Errorf("control.List scan: %w", err)
+		}
+		controls = append(controls, c)
+	}
+	return controls, rows.Err()
+}
+
+func (r *controlRepository) GetByID(ctx context.Context, auditID, controlID int) (*model.AuditControl, error) {
+	q := "SELECT" + controlSelectCols + controlFromClause + " WHERE c.audit_id = ? AND c.id = ?"
+	row := r.db.QueryRowContext(ctx, q, auditID, controlID)
+	c, err := scanControl(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("control.GetByID(%d,%d): %w", auditID, controlID, err)
+	}
+	return c, nil
+}
+
+func (r *controlRepository) Create(ctx context.Context, auditID int, req model.AddControlRequest, createdBy string) (*model.AuditControl, error) {
+	// OE controls start at POPULATION_PENDING; DESIGN controls start at EVIDENCE_PENDING.
+	initialStatus := "EVIDENCE_PENDING"
+	if req.RequirementType == "OE" {
+		initialStatus = "POPULATION_PENDING"
+	}
+
+	res, err := r.db.ExecContext(ctx, `
+		INSERT INTO audit_control
+		  (audit_id, control_number, description, evidence_requirement,
+		   requirement_type, control_type, scope,
+		   owner_id, team_id, auditor_id, due_date,
+		   status, is_manually_added, created_by, updated_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		auditID,
+		req.ControlNumber, req.Description, stringPtrVal(req.EvidenceRequirement),
+		req.RequirementType, req.ControlType, req.Scope,
+		intPtrVal(req.OwnerID), intPtrVal(req.TeamID), intPtrVal(req.AuditorID),
+		stringPtrVal(req.DueDate),
+		initialStatus, req.IsManuallyAdded,
+		createdBy, createdBy,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("control.Create: %w", err)
+	}
+	id64, _ := res.LastInsertId()
+	return r.GetByID(ctx, auditID, int(id64))
+}
+
+func (r *controlRepository) BulkCreate(ctx context.Context, auditID int, reqs []model.AddControlRequest, createdBy string) ([]*model.AuditControl, error) {
+	controls := make([]*model.AuditControl, 0, len(reqs))
+	for _, req := range reqs {
+		c, err := r.Create(ctx, auditID, req, createdBy)
+		if err != nil {
+			return nil, err
+		}
+		controls = append(controls, c)
+	}
+	return controls, nil
+}
+
+func (r *controlRepository) Update(ctx context.Context, auditID, controlID int, req model.UpdateControlRequest, updatedBy string) error {
+	setParts := []string{"updated_by = ?", "updated_at = NOW()"}
+	args := []any{updatedBy}
+
+	// Each optional field is prepended so updated_by stays at the end before WHERE args.
+	addField := func(col string, val any) {
+		setParts = append([]string{col + " = ?"}, setParts...)
+		args = append([]any{val}, args...)
+	}
+
+	if req.ControlNumber != nil {
+		addField("control_number", *req.ControlNumber)
+	}
+	if req.Description != nil {
+		addField("description", *req.Description)
+	}
+	if req.EvidenceRequirement != nil {
+		addField("evidence_requirement", *req.EvidenceRequirement)
+	}
+	if req.RequirementType != nil {
+		addField("requirement_type", *req.RequirementType)
+	}
+	if req.ControlType != nil {
+		addField("control_type", *req.ControlType)
+	}
+	if req.Scope != nil {
+		addField("scope", *req.Scope)
+	}
+	if req.OwnerID != nil {
+		addField("owner_id", *req.OwnerID)
+	}
+	if req.TeamID != nil {
+		addField("team_id", *req.TeamID)
+	}
+	if req.AuditorID != nil {
+		addField("auditor_id", *req.AuditorID)
+	}
+	if req.DueDate != nil {
+		addField("due_date", *req.DueDate)
+	}
+
+	args = append(args, auditID, controlID)
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE audit_control SET "+strings.Join(setParts, ", ")+" WHERE audit_id = ? AND id = ?",
+		args...)
+	if err != nil {
+		return fmt.Errorf("control.Update(%d,%d): %w", auditID, controlID, err)
+	}
+	return nil
+}
+
+func (r *controlRepository) UpdateStatus(ctx context.Context, auditID, controlID int, status string, comment *string, updatedBy string) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE audit_control
+		SET status = ?, comments = ?, updated_by = ?, updated_at = NOW()
+		WHERE audit_id = ? AND id = ?`,
+		status, stringPtrVal(comment), updatedBy, auditID, controlID,
+	)
+	if err != nil {
+		return fmt.Errorf("control.UpdateStatus(%d,%d): %w", auditID, controlID, err)
+	}
+	return nil
+}
+
+func (r *controlRepository) Delete(ctx context.Context, auditID, controlID int) error {
+	_, err := r.db.ExecContext(ctx,
+		"DELETE FROM audit_control WHERE audit_id = ? AND id = ?",
+		auditID, controlID,
+	)
+	if err != nil {
+		return fmt.Errorf("control.Delete(%d,%d): %w", auditID, controlID, err)
+	}
+	return nil
+}
+
+func scanControl(s scanner) (*model.AuditControl, error) {
+	var (
+		id              int
+		auditID         int
+		ownerID         sql.NullInt64
+		ownerName       sql.NullString
+		teamID          sql.NullInt64
+		teamName        sql.NullString
+		auditorID       sql.NullInt64
+		auditorName     sql.NullString
+		controlNumber   string
+		description     string
+		evidenceReq     sql.NullString
+		requirementType string
+		controlType     string
+		scope           string
+		dueDate         sql.NullString
+		status          string
+		sampleRef       sql.NullString
+		sampleFileURL   sql.NullString
+		sampleFileName  sql.NullString
+		comments        sql.NullString
+		isManuallyAdded bool
+		isOverdue       bool
+		createdAt       time.Time
+		updatedAt       time.Time
+	)
+	err := s.Scan(
+		&id, &auditID,
+		&ownerID, &ownerName,
+		&teamID, &teamName,
+		&auditorID, &auditorName,
+		&controlNumber, &description, &evidenceReq,
+		&requirementType, &controlType, &scope,
+		&dueDate, &status,
+		&sampleRef, &sampleFileURL, &sampleFileName,
+		&comments, &isManuallyAdded, &isOverdue,
+		&createdAt, &updatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &model.AuditControl{
+		ID:                  id,
+		AuditID:             auditID,
+		OwnerID:             nullIntPtr(ownerID),
+		OwnerName:           nullStringPtr(ownerName),
+		TeamID:              nullIntPtr(teamID),
+		TeamName:            nullStringPtr(teamName),
+		AuditorID:           nullIntPtr(auditorID),
+		AuditorName:         nullStringPtr(auditorName),
+		ControlNumber:       controlNumber,
+		Description:         description,
+		EvidenceRequirement: nullStringPtr(evidenceReq),
+		RequirementType:     requirementType,
+		ControlType:         controlType,
+		Scope:               scope,
+		DueDate:             nullStringPtr(dueDate),
+		Status:              status,
+		SampleReference:     nullStringPtr(sampleRef),
+		SampleFileURL:       nullStringPtr(sampleFileURL),
+		SampleFileName:      nullStringPtr(sampleFileName),
+		Comments:            nullStringPtr(comments),
+		IsManuallyAdded:     isManuallyAdded,
+		IsOverdue:           isOverdue,
+		CreatedAt:           createdAt,
+		UpdatedAt:           updatedAt,
+	}, nil
+}

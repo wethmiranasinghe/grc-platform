@@ -105,12 +105,13 @@ export default function Brand({
       <HeaderUI.BrandTitle
         sx={{
           ...BRAND_TITLE_BASE_SX,
+          fontWeight: 700,
           fontSize: {
-            xs: "0.8125rem",
-            sm: "0.875rem",
-            md: "1rem",
-            lg: "0.875rem",
-            xl: "1rem",
+            xs: "0.9375rem",
+            sm: "1rem",
+            md: "1.125rem",
+            lg: "1rem",
+            xl: "1.125rem",
           },
           [theme.breakpoints.down("xl")]: {
             display: "inline-block",

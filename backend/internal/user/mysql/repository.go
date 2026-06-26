@@ -17,35 +17,71 @@
 package mysql
 
 import (
-	"context"
-	"database/sql"
+    "context"
+    "database/sql"
+    "fmt"
 
-	"github.com/wso2-open-operations/grc-platform/backend/internal/user"
+    "github.com/wso2-open-operations/grc-platform/backend/internal/user"
 )
 
 type repository struct{ db *sql.DB }
 
 // NewRepository creates a MySQL-backed user.Repository.
 func NewRepository(db *sql.DB) user.Repository {
-	return &repository{db: db}
+    return &repository{db: db}
 }
 
 func (r *repository) GetByEmail(ctx context.Context, email string) (*user.User, error) {
-	// TODO: SELECT from user WHERE email = ? AND status != 'REMOVED'
-	return nil, nil
+    u := &user.User{}
+    err := r.db.QueryRowContext(ctx,
+        "SELECT id, display_name, email, status FROM user WHERE email = ? AND status != 'REMOVED'",
+        email,
+    ).Scan(&u.ID, &u.DisplayName, &u.Email, &u.Status)
+    if err == sql.ErrNoRows {
+        return nil, nil
+    }
+    if err != nil {
+        return nil, fmt.Errorf("get user by email: %w", err)
+    }
+    return u, nil
 }
 
 func (r *repository) GetByID(ctx context.Context, id int) (*user.User, error) {
-	// TODO: SELECT from user WHERE id = ? AND status != 'REMOVED'
-	return nil, nil
+    u := &user.User{}
+    err := r.db.QueryRowContext(ctx,
+        "SELECT id, display_name, email, status FROM user WHERE id = ? AND status != 'REMOVED'",
+        id,
+    ).Scan(&u.ID, &u.DisplayName, &u.Email, &u.Status)
+    if err == sql.ErrNoRows {
+        return nil, nil
+    }
+    if err != nil {
+        return nil, fmt.Errorf("get user by id: %w", err)
+    }
+    return u, nil
 }
 
 func (r *repository) Upsert(ctx context.Context, email, displayName string) (*user.User, error) {
-	// TODO: INSERT ... ON DUPLICATE KEY UPDATE display_name = VALUES(display_name)
-	return nil, nil
+    // TODO: INSERT ... ON DUPLICATE KEY UPDATE display_name = VALUES(display_name)
+    return nil, nil
 }
 
 func (r *repository) List(ctx context.Context) ([]*user.User, error) {
-	// TODO: SELECT from user WHERE status = 'ACTIVE' ORDER BY display_name
-	return nil, nil
+    rows, err := r.db.QueryContext(ctx,
+        "SELECT id, display_name, email, status FROM user WHERE status = 'ACTIVE' ORDER BY display_name",
+    )
+    if err != nil {
+        return nil, fmt.Errorf("list users: %w", err)
+    }
+    defer rows.Close()
+
+    var users []*user.User
+    for rows.Next() {
+        u := &user.User{}
+        if err := rows.Scan(&u.ID, &u.DisplayName, &u.Email, &u.Status); err != nil {
+            return nil, fmt.Errorf("scan user row: %w", err)
+        }
+        users = append(users, u)
+    }
+    return users, rows.Err()
 }

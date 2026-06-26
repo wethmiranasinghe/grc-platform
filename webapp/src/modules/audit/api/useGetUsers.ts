@@ -19,29 +19,18 @@ import { useAuthApiClient } from "@hooks/useAuthApiClient";
 import { BACKEND_BASE_URL } from "@config/apiConfig";
 import type { AuditUser } from "@modules/audit/types/user";
 
-// TODO: replace with real mock data when available
-const MOCK_USERS: AuditUser[] = [];
+export const AUDIT_USERS_QUERY_KEY = ["audit", "users"] as const;
 
-/**
- * Fetches the list of WSO2 users available for control assignment.
- *
- * Backend responsibility: call Asgardeo SCIM2 GET /scim2/Users using a
- * service-account token, map to AuditUser, and return the list.
- * Endpoint: GET /api/v1/users
- */
 export function useGetUsers() {
   const authFetch = useAuthApiClient();
 
   return useQuery({
-    queryKey: ["users"] as const,
+    queryKey: AUDIT_USERS_QUERY_KEY,
     queryFn: async (): Promise<AuditUser[]> => {
-      if (!BACKEND_BASE_URL || window.config?.GRC_PLATFORM_MOCK_AUTH === true) {
-        return MOCK_USERS;
-      }
-      const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/users`);
+      const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/audit/users`);
       if (!res.ok) throw new Error(`Failed to load users (${res.status})`);
       return res.json() as Promise<AuditUser[]>;
     },
-    staleTime: 5 * 60 * 1000, // user list changes rarely — cache for 5 min
+    staleTime: 5 * 60 * 1000,
   });
 }

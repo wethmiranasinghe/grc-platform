@@ -17,20 +17,20 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuthApiClient } from "@hooks/useAuthApiClient";
 import { BACKEND_BASE_URL } from "@config/apiConfig";
-import type { Audit } from "@modules/audit/types/audit";
+import type { AuditProduct } from "@modules/audit/types/audit";
 
-export const auditQueryKey = (id: number) => ["audits", id] as const;
+export const PRODUCTS_QUERY_KEY = ["audit", "products"] as const;
 
-export function useGetAudit(id: number) {
+export function useGetProducts() {
   const authFetch = useAuthApiClient();
 
   return useQuery({
-    queryKey: auditQueryKey(id),
-    queryFn: async (): Promise<Audit> => {
-      const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/audits/${id}`);
-      if (!res.ok) throw new Error(`Failed to load audit (${res.status})`);
-      return res.json() as Promise<Audit>;
+    queryKey: PRODUCTS_QUERY_KEY,
+    queryFn: async (): Promise<AuditProduct[]> => {
+      const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/audit/products`);
+      if (!res.ok) throw new Error(`Failed to load products (${res.status})`);
+      return res.json() as Promise<AuditProduct[]>;
     },
-    enabled: id > 0,
+    staleTime: 10 * 60 * 1000,
   });
 }

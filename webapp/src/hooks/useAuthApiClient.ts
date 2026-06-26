@@ -66,13 +66,15 @@ export function useAuthApiClient() {
     input: RequestInfo | URL,
     options?: RequestInit,
   ): Promise<Response> => {
-    const token = await getIdToken();
-    if (!token) {
-      throw new Error("Unable to retrieve ID token");
+    let token: string | null = null;
+    try {
+      token = await getIdToken();
+    } catch {
+      // Asgardeo not configured — backend must have AUTH_TOKEN_VALIDATOR_ENABLED=false
     }
     return fetch(input, {
       ...options,
-      headers: buildRequestHeaders(options, token),
+      headers: buildRequestHeaders(options, token ?? "local-dev"),
     });
   };
 

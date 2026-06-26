@@ -14,17 +14,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import type { FilterField } from "@modules/audit/components/FilterPanel";
-import { CONTROL_STATUS_LABELS } from "@modules/audit/utils/controlStatus";
 import type { AuditControl } from "@modules/audit/types/audit";
 
 export const EMPTY_CONTROL_FILTERS: Record<string, string[]> = {
-  isOverdue: [],
   status: [],
-  teamName: [],
   requirementType: [],
   controlType: [],
   scope: [],
+  teamName: [],
+  auditorName: [],
+  ownerName: [],
 };
 
 /** Returns the number of filter fields that have at least one value selected. */
@@ -48,72 +47,19 @@ export function applyControlFilters(
       const matchesDesc = c.description.toLowerCase().includes(q);
       if (!matchesNumber && !matchesDesc) return false;
     }
-    if (filters.isOverdue?.includes("true") && !c.isOverdue) return false;
-    if (filters.status?.length && !filters.status.includes(c.status)) return false;
+    if (filters.status?.length) {
+      const includeOverdue = filters.status.includes("OVERDUE");
+      const statusValues = filters.status.filter((s) => s !== "OVERDUE");
+      const matchesStatus = statusValues.length > 0 && statusValues.includes(c.status);
+      const matchesOverdue = includeOverdue && c.isOverdue;
+      if (!matchesStatus && !matchesOverdue) return false;
+    }
     if (filters.requirementType?.length && !filters.requirementType.includes(c.requirementType)) return false;
     if (filters.controlType?.length && !filters.controlType.includes(c.controlType)) return false;
     if (filters.scope?.length && !filters.scope.includes(c.scope)) return false;
     if (filters.teamName?.length && !filters.teamName.includes(c.teamName ?? "")) return false;
+    if (filters.auditorName?.length && !filters.auditorName.includes(c.auditorName ?? "")) return false;
+    if (filters.ownerName?.length && !filters.ownerName.includes(c.ownerName ?? "")) return false;
     return true;
   });
-}
-
-/** Derives the FilterField definitions for the controls filter panel.
- *  The team field is built dynamically from the actual controls in the current audit. */
-export function buildControlFilterFields(controls: AuditControl[]): FilterField[] {
-  const uniqueTeams = [
-    ...new Set(controls.map((c) => c.teamName).filter((v): v is string => v !== null)),
-  ].sort();
-
-  return [
-    {
-      id: "isOverdue",
-      label: "Overdue",
-      options: [{ label: "Overdue only", value: "true" }],
-    },
-    {
-      id: "status",
-      label: "Status",
-      options: (
-        [
-          "SAMPLING_REQUIRED",
-          "NOT_STARTED",
-          "EVIDENCE_SUBMITTED",
-          "COMPLIANCE_REVIEW",
-          "AUDITOR_REVIEW",
-          "APPROVED",
-          "RESUBMIT_REQUIRED",
-        ] as const
-      ).map((s) => ({ label: CONTROL_STATUS_LABELS[s], value: s })),
-    },
-    {
-      id: "teamName",
-      label: "Team",
-      options: uniqueTeams.map((v) => ({ label: v, value: v })),
-    },
-    {
-      id: "requirementType",
-      label: "Req. Type",
-      options: [
-        { label: "Design", value: "DESIGN" },
-        { label: "Operative Effectiveness (OE)", value: "OE" },
-      ],
-    },
-    {
-      id: "controlType",
-      label: "Control Type",
-      options: [
-        { label: "Config", value: "CONFIG" },
-        { label: "Non-Config", value: "NON_CONFIG" },
-      ],
-    },
-    {
-      id: "scope",
-      label: "Scope",
-      options: [
-        { label: "Common", value: "COMMON" },
-        { label: "Product Specific", value: "PRODUCT_SPECIFIC" },
-      ],
-    },
-  ];
 }

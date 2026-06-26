@@ -17,14 +17,79 @@
 // Package model defines the domain types for the Audit Hub module.
 package model
 
+import "time"
+
 // AuditControl represents a control under evaluation within an audit.
-// TODO: add fields based on `audit_control` in audit_schema.sql
-type AuditControl struct{}
+type AuditControl struct {
+	ID                  int       `json:"id"`
+	AuditID             int       `json:"auditId"`
+	OwnerID             *int      `json:"ownerId"`
+	OwnerName           *string   `json:"ownerName"`
+	TeamID              *int      `json:"teamId"`
+	TeamName            *string   `json:"teamName"`
+	AuditorID           *int      `json:"auditorId"`
+	AuditorName         *string   `json:"auditorName"`
+	ControlNumber       string    `json:"controlNumber"`
+	Description         string    `json:"description"`
+	EvidenceRequirement *string   `json:"evidenceRequirement"`
+	RequirementType     string    `json:"requirementType"`
+	ControlType         string    `json:"controlType"`
+	Scope               string    `json:"scope"`
+	DueDate             *string   `json:"dueDate"`
+	Status              string    `json:"status"`
+	SampleReference     *string   `json:"sampleReference"`
+	SampleFileURL       *string   `json:"sampleFileUrl"`
+	SampleFileName      *string   `json:"sampleFileName"`
+	Comments            *string   `json:"comments"`
+	IsManuallyAdded     bool      `json:"isManuallyAdded"`
+	IsOverdue           bool      `json:"isOverdue"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
+}
+
+// ControlListResponse is returned by GET /api/v1/audits/{id}/controls.
+type ControlListResponse struct {
+	Items []*AuditControl `json:"items"`
+	Total int             `json:"total"`
+}
 
 // AddControlRequest is the payload for POST /api/v1/audits/{id}/controls.
-// TODO: define fields (control_number, name, description, type, framework_ref)
-type AddControlRequest struct{}
+type AddControlRequest struct {
+	ControlNumber       string  `json:"controlNumber"`
+	Description         string  `json:"description"`
+	EvidenceRequirement *string `json:"evidenceRequirement"`
+	RequirementType     string  `json:"requirementType"` // DESIGN | OE
+	ControlType         string  `json:"controlType"`     // CONFIG | NON_CONFIG
+	Scope               string  `json:"scope"`           // COMMON | PRODUCT_SPECIFIC
+	OwnerID             *int    `json:"ownerId"`
+	TeamID              *int    `json:"teamId"`
+	AuditorID           *int    `json:"auditorId"`
+	DueDate             *string `json:"dueDate"`
+	IsManuallyAdded     bool    `json:"isManuallyAdded"`
+}
 
-// UpdateControlRequest is the payload for PUT .../controls/{controlId}.
-// TODO: define updatable fields
-type UpdateControlRequest struct{}
+// BulkAddControlsRequest is the payload for POST /api/v1/audits/{id}/controls/bulk.
+type BulkAddControlsRequest struct {
+	Controls []AddControlRequest `json:"controls"`
+}
+
+// UpdateControlRequest is the payload for PUT /api/v1/audits/{id}/controls/{controlId}.
+// All fields are optional; nil means "do not change".
+type UpdateControlRequest struct {
+	ControlNumber       *string `json:"controlNumber"`
+	Description         *string `json:"description"`
+	EvidenceRequirement *string `json:"evidenceRequirement"`
+	RequirementType     *string `json:"requirementType"`
+	ControlType         *string `json:"controlType"`
+	Scope               *string `json:"scope"`
+	OwnerID             *int    `json:"ownerId"`
+	TeamID              *int    `json:"teamId"`
+	AuditorID           *int    `json:"auditorId"`
+	DueDate             *string `json:"dueDate"`
+}
+
+// UpdateStatusRequest is the payload for PATCH /api/v1/audits/{id}/controls/{controlId}/status.
+type UpdateStatusRequest struct {
+	Status  string  `json:"status"`
+	Comment *string `json:"comment"`
+}

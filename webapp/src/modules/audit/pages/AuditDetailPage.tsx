@@ -16,10 +16,13 @@
 
 import {
   Button as MuiButton,
+  Chip,
   Divider,
+  IconButton,
   Paper,
   Skeleton,
   Stack,
+  Tooltip,
 } from "@mui/material";
 import { Box, Typography } from "@wso2/oxygen-ui";
 import {
@@ -29,6 +32,7 @@ import {
   ChevronLeft,
   ClipboardList,
   ListChecks,
+  Settings,
 } from "@wso2/oxygen-ui-icons-react";
 import { useState, type JSX } from "react";
 import { useNavigate, useParams } from "react-router";
@@ -36,50 +40,112 @@ import FilterPanel from "@modules/audit/components/FilterPanel";
 import AuditStatusChip from "@modules/audit/components/AuditStatusChip";
 import ControlsTable from "@modules/audit/components/ControlsTable";
 import ControlDrawer from "@modules/audit/components/ControlDrawer";
+import ControlSettingsPanel from "@modules/audit/components/ControlSettingsPanel";
 import { useGetAudit } from "@modules/audit/api/useGetAudit";
 import { useGetControls } from "@modules/audit/api/useGetControls";
 import { formatDateRange } from "@modules/audit/utils/format";
 import {
   EMPTY_CONTROL_FILTERS,
   applyControlFilters,
-  buildControlFilterFields,
   activeFilterCount,
 } from "@modules/audit/utils/controlFilters";
-import type { AuditControl } from "@modules/audit/types/audit";
+import { CONTROL_STATUS_LABELS } from "@modules/audit/utils/controlStatus";
+import type { AuditControl, ControlStatus } from "@modules/audit/types/audit";
+
+// ── Active filter chip helpers ────────────────────────────────────────────────
+
+const FILTER_COLUMN_LABELS: Record<string, string> = {
+  status:          "Status",
+  requirementType: "Req. Type",
+  controlType:     "Control Type",
+  scope:           "Scope",
+  teamName:        "Team",
+  auditorName:     "Auditor POC",
+  ownerName:       "Process Owner",
+};
+
+const FILTER_VALUE_LABELS: Record<string, Record<string, string>> = {
+  requirementType: { DESIGN: "Design", OE: "OE" },
+  controlType:     { CONFIG: "Config", NON_CONFIG: "Non-Config" },
+  scope:           { COMMON: "Common", PRODUCT_SPECIFIC: "Product Specific" },
+};
+
+function getFilterValueLabel(key: string, value: string): string {
+  if (key === "status") {
+    if (value === "OVERDUE") return "Overdue";
+    return CONTROL_STATUS_LABELS[value as ControlStatus] ?? value;
+  }
+  return FILTER_VALUE_LABELS[key]?.[value] ?? value;
+}
+
+type QuickFilter = "all" | "approved" | "inProgress" | "overdue";
+
+function applyQuickFilter(controls: AuditControl[], qf: QuickFilter): AuditControl[] {
+  if (qf === "approved") return controls.filter((c) => c.status === "COMPLETE");
+  if (qf === "overdue") return controls.filter((c) => c.isOverdue);
+  if (qf === "inProgress")
+    return controls.filter((c) => c.status !== "COMPLETE" && !c.isOverdue);
+  return controls;
+}
 
 interface StatCardProps {
   icon: JSX.Element;
   label: string;
   value: number;
-  color?: string;
+  iconBgColor?: string;
+  iconColor?: string;
+  onClick?: () => void;
+  isActive?: boolean;
 }
 
-function StatCard({ icon, label, value, color }: StatCardProps): JSX.Element {
+function StatCard({
+  icon,
+  label,
+  value,
+  iconBgColor = "#f1f5f9",
+  iconColor = "#64748b",
+  onClick,
+  isActive = false,
+}: StatCardProps): JSX.Element {
   return (
     <Paper
       variant="outlined"
-      sx={{ p: 2, borderRadius: 2, display: "flex", alignItems: "center", gap: 2 }}
+      onClick={onClick}
+      sx={{
+        p: 2.5,
+        borderRadius: 2,
+        display: "flex",
+        alignItems: "center",
+        gap: 2,
+        cursor: onClick ? "pointer" : "default",
+        borderColor: isActive ? iconColor : undefined,
+        borderWidth: isActive ? 2 : 1,
+        transition: "border-color 0.15s, box-shadow 0.15s",
+        "&:hover": onClick
+          ? { borderColor: iconColor, boxShadow: `0 0 0 3px ${iconColor}22` }
+          : undefined,
+      }}
     >
       <Box
         sx={{
-          width: 44,
-          height: 44,
+          width: 48,
+          height: 48,
           borderRadius: 2,
-          bgcolor: color ? `${color}.light` : "action.selected",
+          bgcolor: iconBgColor,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          color: color ? `${color}.main` : "text.secondary",
+          color: iconColor,
           flexShrink: 0,
         }}
       >
         {icon}
       </Box>
       <Box>
-        <Typography variant="h5" fontWeight={700} lineHeight={1}>
+        <Typography variant="h4" fontWeight={700} lineHeight={1}>
           {value}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
           {label}
         </Typography>
       </Box>
@@ -106,20 +172,45 @@ export default function AuditDetailPage(): JSX.Element {
 
   const [filters, setFilters] = useState<Record<string, string[]>>(EMPTY_CONTROL_FILTERS);
   const [search, setSearch] = useState("");
+  const [activeQuickFilter, setActiveQuickFilter] = useState<QuickFilter | null>(null);
   const [selectedControl, setSelectedControl] = useState<AuditControl | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const controls = controlsData?.items ?? [];
-  const filteredControls = applyControlFilters(controls, filters, search);
-  const filterFields = buildControlFilterFields(controls);
 
+  // Quick filter (card click) takes precedence over panel filters
+  const filteredControls =
+    activeQuickFilter !== null
+      ? applyQuickFilter(controls, activeQuickFilter)
+      : applyControlFilters(controls, filters, search);
+
+  const approvedCount = controls.filter((c) => c.status === "COMPLETE").length;
   const inProgressCount = controls.filter(
-    (c) =>
-      c.status !== "APPROVED" &&
-      c.status !== "NOT_STARTED" &&
-      c.status !== "SAMPLING_REQUIRED",
+    (c) => c.status !== "COMPLETE" && !c.isOverdue,
   ).length;
   const overdueCount = controls.filter((c) => c.isOverdue).length;
-  const approvedCount = controls.filter((c) => c.status === "APPROVED").length;
+
+  function handleQuickFilter(qf: QuickFilter) {
+    // Toggle off if already active
+    setActiveQuickFilter((prev) => (prev === qf ? null : qf));
+    setFilters(EMPTY_CONTROL_FILTERS);
+    setSearch("");
+  }
+
+  function handleFilterChange(newFilters: Record<string, string[]>) {
+    setFilters(newFilters);
+    setActiveQuickFilter(null);
+  }
+
+  function handleSearchChange(newSearch: string) {
+    setSearch(newSearch);
+    setActiveQuickFilter(null);
+  }
+
+  const isFiltered =
+    activeQuickFilter !== null ||
+    activeFilterCount(filters) > 0 ||
+    search.trim().length > 0;
 
   const handleBack = () => void navigate("/audit/audits");
 
@@ -163,30 +254,46 @@ export default function AuditDetailPage(): JSX.Element {
         </Box>
       ) : (
         audit && (
-          <Box sx={{ mb: 3 }}>
-            <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" mb={0.75}>
-              <Typography variant="h5" fontWeight={700}>
-                {audit.name}
-              </Typography>
-              <AuditStatusChip status={audit.status} />
-            </Stack>
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-              <Typography variant="body2" color="text.secondary">
-                {audit.framework.name}
-                {audit.framework.version ? ` (${audit.framework.version})` : ""}
-              </Typography>
-              <Divider orientation="vertical" flexItem />
-              <Typography variant="body2" color="text.secondary">
-                {audit.product.name}
-              </Typography>
-              <Divider orientation="vertical" flexItem />
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                <CalendarDays size={13} />
-                <Typography variant="body2" color="text.secondary">
-                  {formatDateRange(audit.periodStart, audit.periodEnd)}
+          <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2, mb: 3, flexWrap: "wrap" }}>
+            <Box>
+              <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" mb={0.75}>
+                <Typography variant="h5" fontWeight={700}>
+                  {audit.name}
                 </Typography>
-              </Box>
-            </Stack>
+                <AuditStatusChip status={audit.status} />
+              </Stack>
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                <Typography variant="body2" color="text.secondary">
+                  {audit.framework.name}
+                  {audit.framework.version ? ` (${audit.framework.version})` : ""}
+                </Typography>
+                <Divider orientation="vertical" flexItem />
+                <Typography variant="body2" color="text.secondary">
+                  {audit.product.name}
+                </Typography>
+                <Divider orientation="vertical" flexItem />
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                  <CalendarDays size={13} />
+                  <Typography variant="body2" color="text.secondary">
+                    {formatDateRange(audit.periodStart, audit.periodEnd)}
+                  </Typography>
+                </Box>
+              </Stack>
+            </Box>
+            <Tooltip title="Manage controls">
+              <IconButton
+                onClick={() => setSettingsOpen(true)}
+                sx={{
+                  border: "1px solid",
+                  borderColor: "divider",
+                  borderRadius: 1.5,
+                  p: 1,
+                  flexShrink: 0,
+                }}
+              >
+                <Settings size={20} />
+              </IconButton>
+            </Tooltip>
           </Box>
         )
       )}
@@ -206,10 +313,42 @@ export default function AuditDetailPage(): JSX.Element {
           ))
         ) : (
           <>
-            <StatCard icon={<ClipboardList size={20} />} label="Total Controls" value={controls.length} />
-            <StatCard icon={<CheckCircle2 size={20} />} label="Approved" value={approvedCount} color="success" />
-            <StatCard icon={<ListChecks size={20} />} label="In Progress" value={inProgressCount} color="info" />
-            <StatCard icon={<AlertCircle size={20} />} label="Overdue" value={overdueCount} color="error" />
+            <StatCard
+              icon={<ClipboardList size={22} />}
+              label="Total Controls"
+              value={controls.length}
+              iconBgColor="#f1f5f9"
+              iconColor="#475569"
+              isActive={activeQuickFilter === "all"}
+              onClick={() => handleQuickFilter("all")}
+            />
+            <StatCard
+              icon={<CheckCircle2 size={22} />}
+              label="Approved"
+              value={approvedCount}
+              iconBgColor="#dcfce7"
+              iconColor="#16a34a"
+              isActive={activeQuickFilter === "approved"}
+              onClick={() => handleQuickFilter("approved")}
+            />
+            <StatCard
+              icon={<ListChecks size={22} />}
+              label="In Progress"
+              value={inProgressCount}
+              iconBgColor="#dbeafe"
+              iconColor="#1d4ed8"
+              isActive={activeQuickFilter === "inProgress"}
+              onClick={() => handleQuickFilter("inProgress")}
+            />
+            <StatCard
+              icon={<AlertCircle size={22} />}
+              label="Overdue"
+              value={overdueCount}
+              iconBgColor="#fee2e2"
+              iconColor="#dc2626"
+              isActive={activeQuickFilter === "overdue"}
+              onClick={() => handleQuickFilter("overdue")}
+            />
           </>
         )}
       </Box>
@@ -217,14 +356,38 @@ export default function AuditDetailPage(): JSX.Element {
       {/* Filter + search bar */}
       <Box sx={{ mb: 1.5 }}>
         <FilterPanel
-          fields={filterFields}
-          values={filters}
-          onChange={setFilters}
           search={search}
-          onSearchChange={setSearch}
+          onSearchChange={handleSearchChange}
           searchPlaceholder="Search by control number or description..."
         />
-        {(activeFilterCount(filters) > 0 || search.trim().length > 0) && (
+
+        {/* Active filter chips */}
+        {activeFilterCount(filters) > 0 && (
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1, alignItems: "center" }}>
+            {Object.entries(filters).flatMap(([key, values]) =>
+              values.map((value) => (
+                <Chip
+                  key={`${key}:${value}`}
+                  label={`${FILTER_COLUMN_LABELS[key]}: ${getFilterValueLabel(key, value)}`}
+                  size="small"
+                  onDelete={() =>
+                    handleFilterChange({ ...filters, [key]: filters[key].filter((v) => v !== value) })
+                  }
+                  sx={{ fontSize: "0.78rem" }}
+                />
+              ))
+            )}
+            <MuiButton
+              size="small"
+              onClick={() => handleFilterChange(EMPTY_CONTROL_FILTERS)}
+              sx={{ textTransform: "none", fontSize: "0.78rem", color: "text.secondary" }}
+            >
+              Clear all
+            </MuiButton>
+          </Box>
+        )}
+
+        {isFiltered && (
           <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: "block" }}>
             {filteredControls.length} of {controls.length} controls
           </Typography>
@@ -234,6 +397,9 @@ export default function AuditDetailPage(): JSX.Element {
       {/* Controls table */}
       <ControlsTable
         controls={filteredControls}
+        allControls={controls}
+        filters={filters}
+        onFiltersChange={handleFilterChange}
         isLoading={controlsLoading}
         onRowClick={(control) => setSelectedControl(control)}
       />
@@ -243,6 +409,13 @@ export default function AuditDetailPage(): JSX.Element {
         control={selectedControl}
         open={selectedControl !== null}
         onClose={() => setSelectedControl(null)}
+      />
+
+      {/* Control settings panel */}
+      <ControlSettingsPanel
+        auditId={auditId}
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
       />
     </Box>
   );

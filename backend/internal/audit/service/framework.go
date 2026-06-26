@@ -18,7 +18,9 @@ package service
 
 import (
 	"context"
+	"net/http"
 
+	"github.com/wso2-open-operations/grc-platform/backend/internal/apierror"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/model"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/repository"
 )
@@ -41,21 +43,23 @@ func NewFrameworkService(frameworkRepo repository.FrameworkRepository, productRe
 }
 
 func (s *frameworkService) ListFrameworks(ctx context.Context) ([]*model.AuditFramework, error) {
-	// TODO: delegate to frameworkRepo
-	return nil, nil
+	return s.frameworkRepo.List(ctx)
 }
 
 func (s *frameworkService) CreateFramework(ctx context.Context, req model.CreateFrameworkRequest, createdBy string) (*model.AuditFramework, error) {
-	// TODO: validate name uniqueness, delegate to frameworkRepo
-	return nil, nil
+	if req.Name == "" {
+		return nil, &apierror.Error{StatusCode: http.StatusBadRequest, Body: "name is required"}
+	}
+	return s.frameworkRepo.Create(ctx, req, createdBy)
 }
 
 func (s *frameworkService) ListProducts(ctx context.Context) ([]*model.AuditProduct, error) {
-	// TODO: delegate to productRepo
-	return nil, nil
+	return s.productRepo.List(ctx)
 }
 
 func (s *frameworkService) CreateProduct(ctx context.Context, req model.CreateProductRequest, createdBy string) (*model.AuditProduct, error) {
-	// TODO: validate name uniqueness, delegate to productRepo
-	return nil, nil
+	if req.Name == "" {
+		return nil, &apierror.Error{StatusCode: http.StatusBadRequest, Body: "name is required"}
+	}
+	return s.productRepo.Create(ctx, req, createdBy)
 }

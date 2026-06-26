@@ -17,13 +17,20 @@
 export type AuditStatus = "ACTIVE" | "COMPLETED" | "ARCHIVED" | "REMOVED";
 
 export type ControlStatus =
-  | "SAMPLING_REQUIRED"
-  | "NOT_STARTED"
-  | "EVIDENCE_SUBMITTED"
-  | "COMPLIANCE_REVIEW"
-  | "AUDITOR_REVIEW"
-  | "APPROVED"
-  | "RESUBMIT_REQUIRED";
+  // ── OE population phase ───────────────────────────────────────────────────
+  | "POPULATION_PENDING"           // OE default — team must submit population
+  | "POPULATION_INTERNAL_REVIEW"   // OE — team submitted, compliance reviewing
+  | "POPULATION_UNDER_VALIDATION"  // OE — compliance approved, auditor reviewing
+  | "POPULATION_NEED_CLARIFICATION"// OE — auditor rejected, team must resubmit
+  | "POPULATION_COMPLETE"          // OE — auditor approved population
+  | "AWAITING_SAMPLE"              // OE — auditor needs time to submit sample
+  | "SUBMITTED_SAMPLE"             // OE — auditor submitted sample, team submits evidence
+  // ── Evidence phase (Design default; OE after sample) ──────────────────────
+  | "EVIDENCE_PENDING"             // Design default / OE after rejection cycle
+  | "EVIDENCE_INTERNAL_REVIEW"     // Both — team submitted, compliance reviewing
+  | "EVIDENCE_UNDER_VALIDATION"    // Both — compliance approved, auditor reviewing
+  | "EVIDENCE_NEED_CLARIFICATION"  // Both — auditor rejected, team must resubmit
+  | "COMPLETE";                    // Both — auditor approved, control closed
 
 export type RequirementType = "DESIGN" | "OE";
 export type ControlType = "CONFIG" | "NON_CONFIG";
@@ -60,6 +67,12 @@ export interface Audit {
   updatedAt: string;
 }
 
+export interface PopulationSample {
+  id: number;
+  reference: string;
+  description: string;
+}
+
 export interface AuditControl {
   id: number;
   auditId: number;
@@ -78,11 +91,14 @@ export interface AuditControl {
   dueDate: string | null;
   status: ControlStatus;
   sampleReference: string | null;
+  sampleFileUrl: string | null;
+  sampleFileName: string | null;
   comments: string | null;
   isManuallyAdded: boolean;
   isOverdue: boolean;
   createdAt: string;
   updatedAt: string;
+  samples?: PopulationSample[];
 }
 
 export interface AuditListResponse {
@@ -93,4 +109,42 @@ export interface AuditListResponse {
 export interface ControlListResponse {
   items: AuditControl[];
   total: number;
+}
+
+// ── Request types (sent to backend) ──────────────────────────────────────────
+
+export interface CreateAuditRequest {
+  name: string;
+  frameworkId: number;
+  productId: number;
+  periodStart: string;
+  periodEnd: string;
+  scopeDescription?: string | null;
+}
+
+export interface AddControlRequest {
+  controlNumber: string;
+  description: string;
+  requirementType: RequirementType;
+  controlType: ControlType;
+  scope: ControlScope;
+  evidenceRequirement?: string | null;
+  dueDate?: string | null;
+  ownerId?: number | null;
+  teamId?: number | null;
+  auditorId?: number | null;
+  isManuallyAdded: boolean;
+}
+
+export interface UpdateControlRequest {
+  controlNumber?: string;
+  description?: string;
+  requirementType?: RequirementType;
+  controlType?: ControlType;
+  scope?: ControlScope;
+  evidenceRequirement?: string | null;
+  dueDate?: string | null;
+  ownerId?: number | null;
+  teamId?: number | null;
+  auditorId?: number | null;
 }

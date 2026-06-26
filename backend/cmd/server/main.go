@@ -17,117 +17,126 @@
 package main
 
 import (
-	"context"
-	"errors"
-	"log/slog"
-	"net"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
+    "context"
+    "errors"
+    "log/slog"
+    "net"
+    "net/http"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
 
-	audithandler "github.com/wso2-open-operations/grc-platform/backend/internal/audit/handler"
-	"github.com/wso2-open-operations/grc-platform/backend/internal/config"
-	"github.com/wso2-open-operations/grc-platform/backend/internal/db"
-	"github.com/wso2-open-operations/grc-platform/backend/internal/middleware"
-	riskhandler "github.com/wso2-open-operations/grc-platform/backend/internal/risk/handler"
-	"github.com/wso2-open-operations/grc-platform/backend/internal/shared/privilege"
-	userhandler "github.com/wso2-open-operations/grc-platform/backend/internal/user/handler"
+    audithandler "github.com/wso2-open-operations/grc-platform/backend/internal/audit/handler"
+    "github.com/wso2-open-operations/grc-platform/backend/internal/config"
+    "github.com/wso2-open-operations/grc-platform/backend/internal/db"
+    "github.com/wso2-open-operations/grc-platform/backend/internal/middleware"
+    riskhandler "github.com/wso2-open-operations/grc-platform/backend/internal/risk/handler"
+    "github.com/wso2-open-operations/grc-platform/backend/internal/shared/file"
+    "github.com/wso2-open-operations/grc-platform/backend/internal/shared/privilege"
+    userhandler "github.com/wso2-open-operations/grc-platform/backend/internal/user/handler"
+    usermysql "github.com/wso2-open-operations/grc-platform/backend/internal/user/mysql"
 )
 
 func main() {
-	middleware.ConfigureLogger()
+    middleware.ConfigureLogger()
 
-	cfg, err := config.Load()
-	if err != nil {
-		slog.Error("failed to load configuration", "err", err)
-		os.Exit(1)
-	}
+    cfg, err := config.Load()
+    if err != nil {
+        slog.Error("failed to load configuration", "err", err)
+        os.Exit(1)
+    }
 
-	sqlDB, err := db.Connect(cfg.DB.DSN)
-	if err != nil {
-		slog.Error("failed to connect to database", "err", err)
-		os.Exit(1)
-	}
-	defer sqlDB.Close()
+    sqlDB, err := db.Connect(cfg.DB.DSN)
+    if err != nil {
+        slog.Error("failed to connect to database", "err", err)
+        os.Exit(1)
+    }
+    defer sqlDB.Close()
 
-	// Load the role→privilege mapping from the database.
-	// When TokenValidatorEnabled=false (local dev), skip loading — HasPrivilege returns true for all checks.
-	// When TokenValidatorEnabled=true (production), load is required — exit if it fails.
-	var privStore *privilege.Store
-	if cfg.Auth.TokenValidatorEnabled {
-		loadCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		privStore, err = privilege.New(loadCtx, sqlDB)
-		if err != nil {
-			slog.Error("failed to load privilege mapping from database", "err", err)
-			os.Exit(1)
-		}
-		slog.Info("privilege store loaded")
-	}
+    // Load the role→privilege mapping from the database.
+    // When TokenValidatorEnabled=false (local dev), skip loading — HasPrivilege returns true for all checks.
+    // When TokenValidatorEnabled=true (production), load is required — exit if it fails.
+    var privStore *privilege.Store
+    if cfg.Auth.TokenValidatorEnabled {
+        loadCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+        defer cancel()
+        privStore, err = privilege.New(loadCtx, sqlDB)
+        if err != nil {
+            slog.Error("failed to load privilege mapping from database", "err", err)
+            os.Exit(1)
+        }
+        slog.Info("privilege store loaded")
+    }
 
-	// TODO: wire up the three layers in order:
-	//   1. Repositories  → internal/risk/repository/mysql/  + internal/audit/repository/mysql/ + internal/user/mysql/
-	//   2. Services      → internal/risk/service/           + internal/audit/service/
-	//   3. Handler Deps  → pass services into riskhandler.Deps{} and audithandler.Deps{} below
+    fileSvc := file.NewService(file.StorageConfig{
+        AccountName:   cfg.Azure.StorageAccountName,
+        AccountKey:    cfg.Azure.StorageAccountKey,
+        ContainerName: cfg.Azure.ContainerName,
+    })
 
-	mux := http.NewServeMux()
+    userDeps := userhandler.Deps{
+        Users: usermysql.NewRepository(sqlDB),
+    }
 
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
+    mux := http.NewServeMux()
 
-	userhandler.RegisterRoutes(mux)
-	riskhandler.RegisterRoutes(mux, riskhandler.Deps{})
-	audithandler.RegisterRoutes(mux, audithandler.Deps{})
+    mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusOK)
+    })
 
-	handler := middleware.CorrelationID(
-		middleware.Logger(
-			middleware.Auth(middleware.Config{
-				JWKSEndpoint:          cfg.Auth.JWKSEndpoint,
-				Issuer:                cfg.Auth.Issuer,
-				Audience:              cfg.Auth.Audience,
-				ClockSkew:             cfg.Auth.ClockSkew,
-				TokenValidatorEnabled: cfg.Auth.TokenValidatorEnabled,
-				PrivilegeStore:        privStore,
-			})(mux),
-		),
-	)
+    userhandler.RegisterRoutes(mux, userDeps)
+    riskhandler.RegisterRoutes(mux, buildRiskDeps(sqlDB, fileSvc))
+    audithandler.RegisterRoutes(mux, buildAuditDeps(sqlDB, fileSvc))
 
-	ln, err := net.Listen("tcp", cfg.Port)
-	if err != nil {
-		slog.Error("failed to bind", "addr", cfg.Port, "err", err)
-		os.Exit(1)
-	}
-	slog.Info("server started", "addr", cfg.Port)
+    handler := middleware.CORS(cfg.CORSAllowedOrigin)(
+        middleware.CorrelationID(
+            middleware.Logger(
+                middleware.Auth(middleware.Config{
+                    JWKSEndpoint:          cfg.Auth.JWKSEndpoint,
+                    Issuer:                cfg.Auth.Issuer,
+                    Audience:              cfg.Auth.Audience,
+                    ClockSkew:             cfg.Auth.ClockSkew,
+                    TokenValidatorEnabled: cfg.Auth.TokenValidatorEnabled,
+                    PrivilegeStore:        privStore,
+                })(mux),
+            ),
+        ),
+    )
 
-	srv := &http.Server{
-		Handler:           handler,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
+    ln, err := net.Listen("tcp", cfg.Port)
+    if err != nil {
+        slog.Error("failed to bind", "addr", cfg.Port, "err", err)
+        os.Exit(1)
+    }
+    slog.Info("server started", "addr", cfg.Port)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+    srv := &http.Server{
+        Handler:           handler,
+        ReadHeaderTimeout: 10 * time.Second,
+        ReadTimeout:       30 * time.Second,
+        WriteTimeout:      30 * time.Second,
+        IdleTimeout:       60 * time.Second,
+    }
 
-	go func() {
-		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("server exited unexpectedly", "err", err)
-			os.Exit(1)
-		}
-	}()
+    ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+    defer stop()
 
-	<-ctx.Done()
-	stop()
+    go func() {
+        if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+            slog.Error("server exited unexpectedly", "err", err)
+            os.Exit(1)
+        }
+    }()
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		slog.Error("graceful shutdown failed", "err", err)
-		os.Exit(1)
-	}
-	slog.Info("server stopped")
+    <-ctx.Done()
+    stop()
+
+    shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+    defer cancel()
+    if err := srv.Shutdown(shutdownCtx); err != nil {
+        slog.Error("graceful shutdown failed", "err", err)
+        os.Exit(1)
+    }
+    slog.Info("server stopped")
 }

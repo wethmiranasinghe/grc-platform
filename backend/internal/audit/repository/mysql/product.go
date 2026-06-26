@@ -17,8 +17,12 @@
 package mysql
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
+	"time"
 
+	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/model"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/repository"
 )
 
@@ -29,4 +33,71 @@ func NewProductRepository(db *sql.DB) repository.ProductRepository {
 	return &productRepository{db: db}
 }
 
-// TODO: implement audit_product CRUD
+func (r *productRepository) List(ctx context.Context) ([]*model.AuditProduct, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, name, status, created_at, updated_at
+		FROM audit_product
+		WHERE status = 'ACTIVE'
+		ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("product.List: %w", err)
+	}
+	defer rows.Close()
+
+	var products []*model.AuditProduct
+	for rows.Next() {
+		p, err := scanProduct(rows)
+		if err != nil {
+			return nil, fmt.Errorf("product.List scan: %w", err)
+		}
+		products = append(products, p)
+	}
+	return products, rows.Err()
+}
+
+func (r *productRepository) GetByID(ctx context.Context, id int) (*model.AuditProduct, error) {
+	row := r.db.QueryRowContext(ctx,
+		"SELECT id, name, status, created_at, updated_at FROM audit_product WHERE id = ?", id)
+	p, err := scanProduct(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("product.GetByID(%d): %w", id, err)
+	}
+	return p, nil
+}
+
+func (r *productRepository) Create(ctx context.Context, req model.CreateProductRequest, createdBy string) (*model.AuditProduct, error) {
+	res, err := r.db.ExecContext(ctx, `
+		INSERT INTO audit_product (name, status, created_by, updated_by)
+		VALUES (?, 'ACTIVE', ?, ?)`,
+		req.Name, createdBy, createdBy,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("product.Create: %w", err)
+	}
+	id64, _ := res.LastInsertId()
+	return r.GetByID(ctx, int(id64))
+}
+
+func scanProduct(s scanner) (*model.AuditProduct, error) {
+	var (
+		id        int
+		name      string
+		status    string
+		createdAt time.Time
+		updatedAt time.Time
+	)
+	err := s.Scan(&id, &name, &status, &createdAt, &updatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &model.AuditProduct{
+		ID:        id,
+		Name:      name,
+		Status:    status,
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
+	}, nil
+}

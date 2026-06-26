@@ -19,22 +19,21 @@ import type { JSX } from "react";
 import { CONTROL_STATUS_LABELS } from "@modules/audit/utils/controlStatus";
 import type { ControlStatus } from "@modules/audit/types/audit";
 
-type ChipColor =
-  | "default"
-  | "secondary"
-  | "info"
-  | "warning"
-  | "success"
-  | "error";
-
-const COLORS: Record<ControlStatus, ChipColor> = {
-  SAMPLING_REQUIRED: "default",
-  NOT_STARTED: "default",
-  EVIDENCE_SUBMITTED: "info",
-  COMPLIANCE_REVIEW: "warning",
-  AUDITOR_REVIEW: "secondary",
-  APPROVED: "success",
-  RESUBMIT_REQUIRED: "error",
+const STATUS_COLORS: Record<ControlStatus, string> = {
+  // OE population phase
+  POPULATION_PENDING:            "#6b7280",
+  POPULATION_INTERNAL_REVIEW:    "#b45309",
+  POPULATION_UNDER_VALIDATION:   "#7c3aed",
+  POPULATION_NEED_CLARIFICATION: "#dc2626",
+  POPULATION_COMPLETE:           "#0891b2",
+  AWAITING_SAMPLE:               "#0369a1",
+  SUBMITTED_SAMPLE:              "#0284c7",
+  // Evidence phase
+  EVIDENCE_PENDING:              "#ea580c",
+  EVIDENCE_INTERNAL_REVIEW:      "#b45309",
+  EVIDENCE_UNDER_VALIDATION:     "#7c3aed",
+  EVIDENCE_NEED_CLARIFICATION:   "#dc2626",
+  COMPLETE:                      "#16a34a",
 };
 
 interface ControlStatusChipProps {
@@ -46,12 +45,19 @@ export default function ControlStatusChip({
   status,
   size = "small",
 }: ControlStatusChipProps): JSX.Element {
+  const color = STATUS_COLORS[status];
   return (
     <Chip
       label={CONTROL_STATUS_LABELS[status]}
-      color={COLORS[status]}
       size={size}
-      variant="filled"
+      variant="outlined"
+      sx={{
+        color,
+        borderColor: color,
+        bgcolor: "transparent",
+        fontWeight: 500,
+        "& .MuiChip-label": { px: 1.25 },
+      }}
     />
   );
 }

@@ -17,6 +17,13 @@
 // Package model defines the domain types for the Audit Hub module.
 package model
 
-// AuditProduct represents a product or system in scope for an audit.
-// TODO: add fields based on `audit_product` in audit_schema.sql
-type AuditProduct struct{}
+import "time"
+
+// AuditProduct represents a product or system in scope for an audit (e.g. Asgardeo, Choreo).
+type AuditProduct struct {
+	ID        int       `json:"id"`
+	Name      string    `json:"name"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}

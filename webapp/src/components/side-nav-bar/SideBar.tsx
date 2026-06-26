@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import { Divider } from "@mui/material";
 import { Box, Sidebar } from "@wso2/oxygen-ui";
 import { type JSX, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -120,8 +121,10 @@ export default function SideBar({
       >
         <Sidebar.Nav>
           <Sidebar.Category>
-            {SECTIONS.map((section) => (
-              <Sidebar.Item key={section.id} id={section.id}>
+            {SECTIONS.map((section, idx) => (
+              <Box key={section.id}>
+                {idx > 0 && <Divider sx={{ my: 1, mx: 1.5 }} />}
+                <Sidebar.Item id={section.id}>
                 <Sidebar.ItemIcon>
                   <section.icon size={20} />
                 </Sidebar.ItemIcon>
@@ -134,7 +137,8 @@ export default function SideBar({
                     <Sidebar.ItemLabel>{item.label}</Sidebar.ItemLabel>
                   </Sidebar.Item>
                 ))}
-              </Sidebar.Item>
+                </Sidebar.Item>
+              </Box>
             ))}
           </Sidebar.Category>
         </Sidebar.Nav>

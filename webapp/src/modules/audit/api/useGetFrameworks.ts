@@ -17,20 +17,20 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuthApiClient } from "@hooks/useAuthApiClient";
 import { BACKEND_BASE_URL } from "@config/apiConfig";
-import type { Audit } from "@modules/audit/types/audit";
+import type { AuditFramework } from "@modules/audit/types/audit";
 
-export const auditQueryKey = (id: number) => ["audits", id] as const;
+export const FRAMEWORKS_QUERY_KEY = ["audit", "frameworks"] as const;
 
-export function useGetAudit(id: number) {
+export function useGetFrameworks() {
   const authFetch = useAuthApiClient();
 
   return useQuery({
-    queryKey: auditQueryKey(id),
-    queryFn: async (): Promise<Audit> => {
-      const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/audits/${id}`);
-      if (!res.ok) throw new Error(`Failed to load audit (${res.status})`);
-      return res.json() as Promise<Audit>;
+    queryKey: FRAMEWORKS_QUERY_KEY,
+    queryFn: async (): Promise<AuditFramework[]> => {
+      const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/audit/frameworks`);
+      if (!res.ok) throw new Error(`Failed to load frameworks (${res.status})`);
+      return res.json() as Promise<AuditFramework[]>;
     },
-    enabled: id > 0,
+    staleTime: 10 * 60 * 1000,
   });
 }

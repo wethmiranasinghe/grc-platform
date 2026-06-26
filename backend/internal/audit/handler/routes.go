@@ -28,9 +28,10 @@ import (
 type Deps struct {
 	Audit        auditservice.AuditService
 	Control      auditservice.ControlService
+	Framework    auditservice.FrameworkService
+	User         auditservice.UserService
 	Evidence     auditservice.EvidenceService
 	Population   auditservice.PopulationService
-	Framework    auditservice.FrameworkService
 	Comment      auditservice.CommentService
 	Review       auditservice.ReviewService
 	Notification auditservice.NotificationService
@@ -38,41 +39,33 @@ type Deps struct {
 	Trail        auditservice.TrailService
 }
 
-// RegisterRoutes mounts all Audit Hub routes onto mux under /api/v1/audit.
-// TODO: instantiate handler structs from deps and register each route below
-//
-// Routes to implement (from AUDIT_MODULE_DESIGN.md):
-//
-//	GET    /api/v1/audit/frameworks
-//	POST   /api/v1/audit/frameworks
-//	GET    /api/v1/audit/products
-//	POST   /api/v1/audit/products
-//	GET    /api/v1/audits
-//	POST   /api/v1/audits
-//	GET    /api/v1/audits/{id}
-//	PUT    /api/v1/audits/{id}
-//	POST   /api/v1/audits/{id}/fieldwork
-//	POST   /api/v1/audits/{id}/review
-//	POST   /api/v1/audits/{id}/complete
-//	GET    /api/v1/audits/{id}/controls
-//	POST   /api/v1/audits/{id}/controls
-//	GET    /api/v1/audits/{id}/controls/{controlId}
-//	PUT    /api/v1/audits/{id}/controls/{controlId}
-//	GET    /api/v1/audits/{id}/controls/{controlId}/population
-//	POST   /api/v1/audits/{id}/controls/{controlId}/population
-//	DELETE /api/v1/audits/{id}/controls/{controlId}/population/{populationId}
-//	GET    /api/v1/audits/{id}/controls/{controlId}/evidence
-//	POST   /api/v1/audits/{id}/controls/{controlId}/evidence
-//	DELETE /api/v1/audits/{id}/controls/{controlId}/evidence/{evidenceId}
-//	POST   /api/v1/audits/{id}/controls/{controlId}/evidence/{evidenceId}/review
-//	GET    /api/v1/audits/{id}/controls/{controlId}/comments
-//	POST   /api/v1/audits/{id}/controls/{controlId}/comments
-//	GET    /api/v1/audits/{id}/assignments
-//	POST   /api/v1/audits/{id}/assignments
-//	DELETE /api/v1/audits/{id}/assignments/{assignmentId}
-//	GET    /api/v1/audits/{id}/trail
-//	GET    /api/v1/audit/notifications
-//	PATCH  /api/v1/audit/notifications/{id}/read
+// RegisterRoutes mounts all Audit Hub routes onto mux.
 func RegisterRoutes(mux *http.ServeMux, deps Deps) {
-	// TODO: register routes
+	ah := &auditHandler{svc: deps.Audit}
+	ch := &controlHandler{svc: deps.Control}
+	fh := &frameworkHandler{svc: deps.Framework}
+	uh := &userHandler{svc: deps.User}
+
+	// Lookup data for Create Audit form dropdowns.
+	mux.HandleFunc("GET /api/v1/audit/frameworks", fh.listFrameworks)
+	mux.HandleFunc("POST /api/v1/audit/frameworks", fh.createFramework)
+	mux.HandleFunc("GET /api/v1/audit/products", fh.listProducts)
+	mux.HandleFunc("POST /api/v1/audit/products", fh.createProduct)
+	mux.HandleFunc("GET /api/v1/audit/users", uh.listUsers)
+
+	// Audit CRUD.
+	mux.HandleFunc("GET /api/v1/audits", ah.listAudits)
+	mux.HandleFunc("POST /api/v1/audits", ah.createAudit)
+	mux.HandleFunc("GET /api/v1/audits/{id}", ah.getAudit)
+	mux.HandleFunc("PUT /api/v1/audits/{id}", ah.updateAudit)
+
+	// Control CRUD + status transitions.
+	// Note: /bulk must be registered before /{controlId} so the router matches it first.
+	mux.HandleFunc("GET /api/v1/audits/{id}/controls", ch.listControls)
+	mux.HandleFunc("POST /api/v1/audits/{id}/controls", ch.addControl)
+	mux.HandleFunc("POST /api/v1/audits/{id}/controls/bulk", ch.bulkAddControls)
+	mux.HandleFunc("GET /api/v1/audits/{id}/controls/{controlId}", ch.getControl)
+	mux.HandleFunc("PUT /api/v1/audits/{id}/controls/{controlId}", ch.updateControl)
+	mux.HandleFunc("DELETE /api/v1/audits/{id}/controls/{controlId}", ch.deleteControl)
+	mux.HandleFunc("PATCH /api/v1/audits/{id}/controls/{controlId}/status", ch.updateControlStatus)
 }

@@ -17,25 +17,12 @@
 // Package model defines the domain types for the Audit Hub module.
 package model
 
-import "time"
-
-// AuditFramework represents a compliance standard (SOC2, ISO 27001, HIPAA, …).
-type AuditFramework struct {
-	ID        int       `json:"id"`
-	Name      string    `json:"name"`
-	Version   *string   `json:"version"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-}
-
-// CreateFrameworkRequest is the payload for POST /api/v1/audit/frameworks.
-type CreateFrameworkRequest struct {
-	Name    string  `json:"name"`
-	Version *string `json:"version"`
-}
-
-// CreateProductRequest is the payload for POST /api/v1/audit/products.
-type CreateProductRequest struct {
-	Name string `json:"name"`
+// UserRef is a lightweight user record returned by GET /api/v1/audit/users.
+// Used to populate owner/auditor dropdowns in the UI.
+// When Asgardeo SCIM2 is integrated, profileUrl will be populated from the Asgardeo response.
+type UserRef struct {
+	ID          int     `json:"id"`
+	DisplayName string  `json:"displayName"`
+	Email       string  `json:"email"`
+	ProfileURL  *string `json:"profileUrl"`
 }

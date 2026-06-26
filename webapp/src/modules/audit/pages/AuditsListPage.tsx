@@ -106,8 +106,8 @@ export default function AuditsListPage(): JSX.Element {
         <Button
           variant="contained"
           startIcon={<Plus size={16} />}
-          disabled
           sx={{ textTransform: "none" }}
+          onClick={() => void navigate("/audit/audits/create")}
         >
           New Audit
         </Button>

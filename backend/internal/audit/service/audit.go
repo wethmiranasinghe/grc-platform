@@ -16,68 +16,93 @@
 
 // Package service implements the business logic for the Audit Hub module.
 // Handlers call service methods; services call repository methods.
-// Workflow transitions, validation rules, and trail writes live here.
+// Validation rules and workflow guards live here — not in handlers or repositories.
 package service
 
 import (
 	"context"
+	"net/http"
 
+	"github.com/wso2-open-operations/grc-platform/backend/internal/apierror"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/model"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/repository"
 )
 
-// AuditService defines business operations for audit lifecycle management.
+// AuditService defines business operations for audit engagements.
 type AuditService interface {
 	List(ctx context.Context) ([]*model.Audit, error)
 	GetByID(ctx context.Context, id int) (*model.Audit, error)
 	Create(ctx context.Context, req model.CreateAuditRequest, createdBy string) (*model.Audit, error)
 	Update(ctx context.Context, id int, req model.UpdateAuditRequest, updatedBy string) error
-
-	// Workflow transitions.
-	MoveToFieldwork(ctx context.Context, id int, byUserID string) error
-	SubmitForReview(ctx context.Context, id int, byUserID string) error
-	Complete(ctx context.Context, id int, byUserID string) error
 }
 
 type auditService struct {
-	repo repository.AuditRepository
+	repo        repository.AuditRepository
+	frameworkRepo repository.FrameworkRepository
+	productRepo   repository.ProductRepository
 }
 
-func NewAuditService(repo repository.AuditRepository) AuditService {
-	return &auditService{repo: repo}
+// NewAuditService wires audit, framework, and product repos so Create can validate references.
+func NewAuditService(
+	repo repository.AuditRepository,
+	frameworkRepo repository.FrameworkRepository,
+	productRepo repository.ProductRepository,
+) AuditService {
+	return &auditService{repo: repo, frameworkRepo: frameworkRepo, productRepo: productRepo}
 }
 
 func (s *auditService) List(ctx context.Context) ([]*model.Audit, error) {
-	// TODO: delegate to repo
-	return nil, nil
+	return s.repo.List(ctx)
 }
 
 func (s *auditService) GetByID(ctx context.Context, id int) (*model.Audit, error) {
-	// TODO: delegate to repo; wrap missing row as apierror.Error{StatusCode: 404}
-	return nil, nil
+	a, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if a == nil {
+		return nil, &apierror.Error{StatusCode: http.StatusNotFound, Body: "audit not found"}
+	}
+	return a, nil
 }
 
 func (s *auditService) Create(ctx context.Context, req model.CreateAuditRequest, createdBy string) (*model.Audit, error) {
-	// TODO: validate framework + product exist, delegate to repo, write trail entry
-	return nil, nil
+	if req.Name == "" {
+		return nil, &apierror.Error{StatusCode: http.StatusBadRequest, Body: "name is required"}
+	}
+	if req.FrameworkID <= 0 || req.ProductID <= 0 {
+		return nil, &apierror.Error{StatusCode: http.StatusBadRequest, Body: "frameworkId and productId are required"}
+	}
+	if req.PeriodStart == "" || req.PeriodEnd == "" {
+		return nil, &apierror.Error{StatusCode: http.StatusBadRequest, Body: "periodStart and periodEnd are required"}
+	}
+
+	// Verify framework and product exist.
+	fw, err := s.frameworkRepo.GetByID(ctx, req.FrameworkID)
+	if err != nil {
+		return nil, err
+	}
+	if fw == nil {
+		return nil, &apierror.Error{StatusCode: http.StatusBadRequest, Body: "framework not found"}
+	}
+	pr, err := s.productRepo.GetByID(ctx, req.ProductID)
+	if err != nil {
+		return nil, err
+	}
+	if pr == nil {
+		return nil, &apierror.Error{StatusCode: http.StatusBadRequest, Body: "product not found"}
+	}
+
+	return s.repo.Create(ctx, req, createdBy)
 }
 
 func (s *auditService) Update(ctx context.Context, id int, req model.UpdateAuditRequest, updatedBy string) error {
-	// TODO: fetch audit, validate editable in current status, delegate to repo
-	return nil
-}
-
-func (s *auditService) MoveToFieldwork(ctx context.Context, id int, byUserID string) error {
-	// TODO: guard status == ACTIVE, set FIELDWORK (or equivalent), write trail entry
-	return nil
-}
-
-func (s *auditService) SubmitForReview(ctx context.Context, id int, byUserID string) error {
-	// TODO: guard all controls are in a reviewable state, write trail entry
-	return nil
-}
-
-func (s *auditService) Complete(ctx context.Context, id int, byUserID string) error {
-	// TODO: guard status, set COMPLETED, write trail entry
-	return nil
+	a, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return &apierror.Error{StatusCode: http.StatusNotFound, Body: "audit not found"}
+	}
+	return s.repo.Update(ctx, id, req, updatedBy)
 }

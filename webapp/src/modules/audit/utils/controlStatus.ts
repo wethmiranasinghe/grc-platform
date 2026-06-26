@@ -17,11 +17,16 @@
 import type { ControlStatus } from "@modules/audit/types/audit";
 
 export const CONTROL_STATUS_LABELS: Record<ControlStatus, string> = {
-  SAMPLING_REQUIRED: "Sampling Required",
-  NOT_STARTED: "Not Started",
-  EVIDENCE_SUBMITTED: "Evidence Submitted",
-  COMPLIANCE_REVIEW: "Compliance Review",
-  AUDITOR_REVIEW: "Auditor Review",
-  APPROVED: "Approved",
-  RESUBMIT_REQUIRED: "Resubmit Required",
+  POPULATION_PENDING:            "Population Pending",
+  POPULATION_INTERNAL_REVIEW:    "Population Internal Review",
+  POPULATION_UNDER_VALIDATION:   "Population Under Validation",
+  POPULATION_NEED_CLARIFICATION: "Population Need Clarification",
+  POPULATION_COMPLETE:           "Population Complete",
+  AWAITING_SAMPLE:               "Awaiting Sample",
+  SUBMITTED_SAMPLE:              "Submitted Sample",
+  EVIDENCE_PENDING:              "Evidence Pending",
+  EVIDENCE_INTERNAL_REVIEW:      "Evidence Internal Review",
+  EVIDENCE_UNDER_VALIDATION:     "Evidence Under Validation",
+  EVIDENCE_NEED_CLARIFICATION:   "Evidence Need Clarification",
+  COMPLETE:                      "Complete",
 };
