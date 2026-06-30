@@ -142,6 +142,12 @@ func (r *auditRepository) Update(ctx context.Context, id int, req model.UpdateAu
 	return nil
 }
 
+func (r *auditRepository) Delete(ctx context.Context, id int) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE audit SET status = 'REMOVED', updated_at = NOW() WHERE id = ? AND status != 'REMOVED'", id)
+	return err
+}
+
 // scanner is satisfied by both *sql.Row and *sql.Rows.
 type scanner interface {
 	Scan(dest ...any) error

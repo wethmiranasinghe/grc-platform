@@ -19,9 +19,13 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
+	"github.com/wso2-open-operations/grc-platform/backend/internal/apierror"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/model"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/repository"
 )
@@ -75,6 +79,10 @@ func (r *productRepository) Create(ctx context.Context, req model.CreateProductR
 		req.Name, createdBy, createdBy,
 	)
 	if err != nil {
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+			return nil, &apierror.Error{StatusCode: http.StatusConflict, Body: "A product with this name already exists."}
+		}
 		return nil, fmt.Errorf("product.Create: %w", err)
 	}
 	id64, _ := res.LastInsertId()

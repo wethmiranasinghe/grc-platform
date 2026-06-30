@@ -23,6 +23,10 @@ import {
   CardActionArea,
   CardContent,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   FormControl,
   IconButton,
@@ -57,17 +61,24 @@ import { useGetAudits } from "@modules/audit/api/useGetAudits";
 import { useGetControls } from "@modules/audit/api/useGetControls";
 import { useGetFrameworks } from "@modules/audit/api/useGetFrameworks";
 import { useGetProducts } from "@modules/audit/api/useGetProducts";
+import { useGetUsers } from "@modules/audit/api/useGetUsers";
+import { useGetTeams } from "@modules/audit/api/useGetTeams";
 import { useCreateAudit } from "@modules/audit/api/useCreateAudit";
+import { useCreateFramework } from "@modules/audit/api/useCreateFramework";
+import { useCreateProduct } from "@modules/audit/api/useCreateProduct";
 import { useBulkAddControls } from "@modules/audit/api/useBulkAddControls";
 import type {
   AddControlRequest,
   AuditControl,
   AuditFramework,
   AuditProduct,
+  AuditTeam,
   ControlScope,
   ControlType,
+  PopulationDetails,
   RequirementType,
 } from "@modules/audit/types/audit";
+import type { AuditUser } from "@modules/audit/types/user";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -75,6 +86,16 @@ type ControlSource = "empty" | "copy" | "csv";
 
 let _localIdCounter = 0;
 const nextLocalId = () => String(++_localIdCounter);
+
+interface PopulationDraft {
+  description: string;
+  dueDate: string;
+  comments: string;
+}
+
+function blankPopulation(): PopulationDraft {
+  return { description: "", dueDate: "", comments: "" };
+}
 
 interface DraftControl {
   localId: string;
@@ -85,6 +106,10 @@ interface DraftControl {
   scope: ControlScope;
   evidenceRequirement: string;
   dueDate: string;
+  ownerId: number | null;
+  teamId: number | null;
+  auditorId: number | null;
+  population: PopulationDraft | null; // non-null for OE controls
 }
 
 function blankDraft(): DraftControl {
@@ -97,6 +122,10 @@ function blankDraft(): DraftControl {
     scope: "COMMON",
     evidenceRequirement: "",
     dueDate: "",
+    ownerId: null,
+    teamId: null,
+    auditorId: null,
+    population: null,
   };
 }
 
@@ -110,10 +139,22 @@ function controlToDraft(c: AuditControl): DraftControl {
     scope: c.scope,
     evidenceRequirement: c.evidenceRequirement ?? "",
     dueDate: c.dueDate ?? "",
+    ownerId: c.ownerId ?? null,
+    teamId: c.teamId ?? null,
+    auditorId: c.auditorId ?? null,
+    population: c.requirementType === "OE" ? blankPopulation() : null,
   };
 }
 
 function draftToRequest(d: DraftControl): AddControlRequest {
+  let population: PopulationDetails | null = null;
+  if (d.requirementType === "OE" && d.population) {
+    population = {
+      description: d.population.description.trim(),
+      dueDate: d.population.dueDate || null,
+      comments: d.population.comments.trim() || null,
+    };
+  }
   return {
     controlNumber: d.controlNumber.trim(),
     description: d.description.trim(),
@@ -122,22 +163,30 @@ function draftToRequest(d: DraftControl): AddControlRequest {
     scope: d.scope,
     evidenceRequirement: d.evidenceRequirement.trim() || null,
     dueDate: d.dueDate || null,
+    ownerId: d.ownerId,
+    teamId: d.teamId,
+    auditorId: d.auditorId,
     isManuallyAdded: true,
+    population,
   };
 }
 
 // ── CSV parsing ───────────────────────────────────────────────────────────────
 
-const CSV_REQUIRED_COLS = ["control_number", "description", "requirement_type", "control_type", "scope"];
+// Required CSV columns. Optional: requirement_type, control_type, scope, due_date.
+// Columns for auditor_poc, process_owner, team are not supported via CSV
+// because they require database IDs — set them manually after upload.
+const CSV_REQUIRED_COLS = ["control_number", "description", "evidence_requirement"];
 
 function parseCSV(text: string): DraftControl[] | string {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return "CSV must have a header row and at least one data row.";
   const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
   const missing = CSV_REQUIRED_COLS.filter((c) => !headers.includes(c));
-  if (missing.length > 0) return `Missing columns: ${missing.join(", ")}`;
+  if (missing.length > 0) return `Missing required columns: ${missing.join(", ")}`;
 
   const idx = (name: string) => headers.indexOf(name);
+  const has = (name: string) => idx(name) >= 0;
   const validReq = (v: string): v is RequirementType => v === "DESIGN" || v === "OE";
   const validCtl = (v: string): v is ControlType => v === "CONFIG" || v === "NON_CONFIG";
   const validScope = (v: string): v is ControlScope => v === "COMMON" || v === "PRODUCT_SPECIFIC";
@@ -151,76 +200,229 @@ function parseCSV(text: string): DraftControl[] | string {
       c.startsWith('"') ? c.slice(1, -1) : c.trim(),
     ) ?? line.split(",").map((c) => c.trim());
 
-    const reqType = (cells[idx("requirement_type")] ?? "").toUpperCase();
-    const ctlType = (cells[idx("control_type")] ?? "").toUpperCase();
-    const scope = (cells[idx("scope")] ?? "").toUpperCase();
-
-    if (!validReq(reqType)) return `Row ${i + 1}: requirement_type must be DESIGN or OE, got "${reqType}"`;
-    if (!validCtl(ctlType)) return `Row ${i + 1}: control_type must be CONFIG or NON_CONFIG, got "${ctlType}"`;
-    if (!validScope(scope)) return `Row ${i + 1}: scope must be COMMON or PRODUCT_SPECIFIC, got "${scope}"`;
-
-    const cn = cells[idx("control_number")] ?? "";
+    const cn   = cells[idx("control_number")] ?? "";
     const desc = cells[idx("description")] ?? "";
     if (!cn || !desc) continue;
+
+    // Optional columns — validate only when the column is present; fall back to defaults.
+    const rawReq   = has("requirement_type") ? (cells[idx("requirement_type")] ?? "").toUpperCase() : "DESIGN";
+    const rawCtl   = has("control_type")     ? (cells[idx("control_type")]     ?? "").toUpperCase() : "NON_CONFIG";
+    const rawScope = has("scope")            ? (cells[idx("scope")]            ?? "").toUpperCase() : "COMMON";
+
+    if (!validReq(rawReq))
+      return `Row ${i + 1}: requirement_type must be DESIGN or OE, got "${rawReq}"`;
+    if (!validCtl(rawCtl))
+      return `Row ${i + 1}: control_type must be CONFIG or NON_CONFIG, got "${rawCtl}"`;
+    if (!validScope(rawScope))
+      return `Row ${i + 1}: scope must be COMMON or PRODUCT_SPECIFIC, got "${rawScope}"`;
+
+    const pop: PopulationDraft | null = rawReq === "OE"
+      ? {
+          description: has("population_description") ? (cells[idx("population_description")] ?? "") : "",
+          dueDate:     has("population_due_date")     ? (cells[idx("population_due_date")]    ?? "") : "",
+          comments:    has("population_comments")     ? (cells[idx("population_comments")]    ?? "") : "",
+        }
+      : null;
 
     drafts.push({
       localId: nextLocalId(),
       controlNumber: cn,
       description: desc,
-      requirementType: reqType,
-      controlType: ctlType,
-      scope: scope,
+      requirementType: rawReq,
+      controlType: rawCtl,
+      scope: rawScope,
       evidenceRequirement: cells[idx("evidence_requirement")] ?? "",
-      dueDate: cells[idx("due_date")] ?? "",
+      dueDate: has("due_date") ? (cells[idx("due_date")] ?? "") : "",
+      // Auditor POC / Process Owner / Team require database IDs — not supported via CSV.
+      ownerId: null,
+      teamId: null,
+      auditorId: null,
+      population: pop,
     });
   }
   if (drafts.length === 0) return "No valid rows found in CSV.";
   return drafts;
 }
 
+// ── Population details dialog ─────────────────────────────────────────────────
+
+interface PopulationDialogProps {
+  open: boolean;
+  controlDraft: DraftControl;
+  onClose: () => void;
+  onChangePopulation: (p: PopulationDraft) => void;
+  onChangeAssignment: (field: "ownerId" | "teamId" | "auditorId", val: number | null) => void;
+  users: AuditUser[];
+  teams: AuditTeam[];
+}
+
+function PopulationDialog({
+  open, controlDraft, onClose, onChangePopulation, onChangeAssignment, users, teams,
+}: PopulationDialogProps): JSX.Element {
+  const pop = controlDraft.population ?? blankPopulation();
+  const paperProps = { sx: { backdropFilter: "none", backgroundColor: "background.paper" } };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        Population Details — {controlDraft.controlNumber || "New Control"}
+      </DialogTitle>
+      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2.5, pt: "16px !important" }}>
+        <Alert severity="info" sx={{ py: 0.5 }}>
+          OE controls require a population to be defined. The auditor will draw a sample from this population.
+        </Alert>
+
+        {/* Population description */}
+        <TextField
+          label="Population"
+          required
+          multiline
+          rows={3}
+          fullWidth
+          value={pop.description}
+          onChange={(e) => onChangePopulation({ ...pop, description: e.target.value })}
+          placeholder="Describe what records make up the population (e.g. all access review records for Jan–Dec 2026)"
+        />
+
+        {/* Due date + comments */}
+        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+          <TextField
+            label="Population Due Date"
+            type="date"
+            fullWidth
+            value={pop.dueDate}
+            onChange={(e) => onChangePopulation({ ...pop, dueDate: e.target.value })}
+            InputLabelProps={{ shrink: true }}
+            helperText="When population must be submitted"
+          />
+          <TextField
+            label="Comments (optional)"
+            fullWidth
+            value={pop.comments}
+            onChange={(e) => onChangePopulation({ ...pop, comments: e.target.value })}
+            placeholder="Any additional notes"
+          />
+        </Box>
+
+        <Divider />
+
+        {/* Assignments — default from control, editable here */}
+        <Typography variant="subtitle2" fontWeight={600}>Assignments</Typography>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <Autocomplete
+            options={users}
+            getOptionLabel={(u) => u.displayName}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            value={users.find((u) => u.id === controlDraft.ownerId) ?? null}
+            onChange={(_e, val) => onChangeAssignment("ownerId", val?.id ?? null)}
+            slotProps={{ paper: paperProps }}
+            renderInput={(params) => <TextField {...params} label="Process Owner" />}
+          />
+          <Autocomplete
+            options={users}
+            getOptionLabel={(u) => u.displayName}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            value={users.find((u) => u.id === controlDraft.auditorId) ?? null}
+            onChange={(_e, val) => onChangeAssignment("auditorId", val?.id ?? null)}
+            slotProps={{ paper: paperProps }}
+            renderInput={(params) => <TextField {...params} label="Auditor POC" />}
+          />
+          <FormControl fullWidth>
+            <InputLabel>Team</InputLabel>
+            <Select
+              label="Team"
+              value={controlDraft.teamId !== null ? String(controlDraft.teamId) : ""}
+              onChange={(e) => {
+                const v = e.target.value as string;
+                onChangeAssignment("teamId", v === "" ? null : Number(v));
+              }}
+            >
+              <MenuItem value=""><em>None</em></MenuItem>
+              {teams.map((t) => (
+                <MenuItem key={t.id} value={String(t.id)}>{t.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} sx={{ textTransform: "none" }}>Done</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // ── Editable controls table ───────────────────────────────────────────────────
+
+const FS = { fontSize: "0.8rem" } as const;
 
 interface EditableControlsTableProps {
   drafts: DraftControl[];
   onChange: (drafts: DraftControl[]) => void;
+  users: AuditUser[];
+  teams: AuditTeam[];
 }
 
-function EditableControlsTable({ drafts, onChange }: EditableControlsTableProps): JSX.Element {
+function EditableControlsTable({ drafts, onChange, users, teams }: EditableControlsTableProps): JSX.Element {
+  const [populationDialogId, setPopulationDialogId] = useState<string | null>(null);
+  const dialogDraft = drafts.find((d) => d.localId === populationDialogId);
+
   function update<K extends keyof DraftControl>(localId: string, key: K, val: DraftControl[K]) {
     onChange(drafts.map((d) => (d.localId === localId ? { ...d, [key]: val } : d)));
+  }
+
+  function handleReqTypeChange(localId: string, newType: RequirementType) {
+    onChange(drafts.map((d) => {
+      if (d.localId !== localId) return d;
+      return {
+        ...d,
+        requirementType: newType,
+        // auto-init population when switching to OE; clear it when switching to DESIGN
+        population: newType === "OE" ? (d.population ?? blankPopulation()) : null,
+      };
+    }));
   }
 
   function remove(localId: string) {
     onChange(drafts.filter((d) => d.localId !== localId));
   }
 
+  const paperProps = { sx: { backdropFilter: "none", backgroundColor: "background.paper" } };
+
   return (
+    <>
     <Paper variant="outlined" sx={{ borderRadius: 2 }}>
-    <TableContainer sx={{ maxHeight: 360 }}>
-      <Table size="small" stickyHeader>
+    <TableContainer sx={{ maxHeight: 420, overflowX: "auto" }}>
+      <Table size="small" stickyHeader sx={{ minWidth: 1550 }}>
         <TableHead>
           <TableRow>
-            <TableCell sx={{ fontWeight: 600, minWidth: 110 }}>Control #</TableCell>
-            <TableCell sx={{ fontWeight: 600, minWidth: 200 }}>Description</TableCell>
-            <TableCell sx={{ fontWeight: 600, minWidth: 110 }}>Req. Type</TableCell>
-            <TableCell sx={{ fontWeight: 600, minWidth: 130 }}>Control Type</TableCell>
-            <TableCell sx={{ fontWeight: 600, minWidth: 150 }}>Scope</TableCell>
-            <TableCell sx={{ fontWeight: 600, minWidth: 130 }}>Due Date</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 90 }}>Control #</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 180 }}>Description</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 150 }}>Evidence Requirement</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 95 }}>Req. Type</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 130 }}>Population</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 115 }}>Control Type</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 130 }}>Scope</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 155 }}>Process Owner</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 155 }}>Auditor POC</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 130 }}>Team</TableCell>
+            <TableCell sx={{ fontWeight: 600, minWidth: 108 }}>Due Date</TableCell>
             <TableCell sx={{ width: 40 }} />
           </TableRow>
         </TableHead>
         <TableBody>
           {drafts.length === 0 && (
             <TableRow>
-              <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+              <TableCell colSpan={12} align="center" sx={{ py: 3 }}>
                 <Typography variant="body2" color="text.secondary">
-                  No controls yet — click "Add Row" to begin.
+                  No controls yet - click "Add Row" to begin.
                 </Typography>
               </TableCell>
             </TableRow>
           )}
           {drafts.map((d) => (
             <TableRow key={d.localId}>
+              {/* Control # */}
               <TableCell>
                 <TextField
                   value={d.controlNumber}
@@ -228,9 +430,10 @@ function EditableControlsTable({ drafts, onChange }: EditableControlsTableProps)
                   size="small"
                   variant="standard"
                   placeholder="CA-01"
-                  inputProps={{ style: { fontSize: "0.8rem" } }}
+                  inputProps={{ style: FS }}
                 />
               </TableCell>
+              {/* Description */}
               <TableCell>
                 <TextField
                   value={d.description}
@@ -239,45 +442,148 @@ function EditableControlsTable({ drafts, onChange }: EditableControlsTableProps)
                   variant="standard"
                   placeholder="Description"
                   fullWidth
-                  inputProps={{ style: { fontSize: "0.8rem" } }}
+                  inputProps={{ style: FS }}
                 />
               </TableCell>
+              {/* Evidence Requirement */}
+              <TableCell>
+                <TextField
+                  value={d.evidenceRequirement}
+                  onChange={(e) => update(d.localId, "evidenceRequirement", e.target.value)}
+                  size="small"
+                  variant="standard"
+                  placeholder="Evidence needed"
+                  fullWidth
+                  inputProps={{ style: FS }}
+                />
+              </TableCell>
+              {/* Req. Type */}
               <TableCell>
                 <Select
                   value={d.requirementType}
-                  onChange={(e) => update(d.localId, "requirementType", e.target.value as RequirementType)}
+                  onChange={(e) => handleReqTypeChange(d.localId, e.target.value as RequirementType)}
                   size="small"
                   variant="standard"
-                  sx={{ fontSize: "0.8rem" }}
+                  sx={{ ...FS }}
                 >
                   <MenuItem value="DESIGN">Design</MenuItem>
                   <MenuItem value="OE">OE</MenuItem>
                 </Select>
               </TableCell>
+              {/* Population — only active for OE rows */}
+              <TableCell>
+                {d.requirementType === "OE" ? (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    <Tooltip title="Edit population details">
+                      <IconButton
+                        size="small"
+                        color={d.population?.description ? "primary" : "default"}
+                        onClick={() => setPopulationDialogId(d.localId)}
+                      >
+                        <ClipboardList size={14} />
+                      </IconButton>
+                    </Tooltip>
+                    <Typography
+                      variant="caption"
+                      color={d.population?.description ? "text.secondary" : "warning.main"}
+                    >
+                      {d.population?.description ? "Set" : "Not set"}
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Typography variant="caption" color="text.disabled">—</Typography>
+                )}
+              </TableCell>
+              {/* Control Type */}
               <TableCell>
                 <Select
                   value={d.controlType}
                   onChange={(e) => update(d.localId, "controlType", e.target.value as ControlType)}
                   size="small"
                   variant="standard"
-                  sx={{ fontSize: "0.8rem" }}
+                  sx={{ ...FS }}
                 >
                   <MenuItem value="CONFIG">Config</MenuItem>
                   <MenuItem value="NON_CONFIG">Non-Config</MenuItem>
                 </Select>
               </TableCell>
+              {/* Scope */}
               <TableCell>
                 <Select
                   value={d.scope}
                   onChange={(e) => update(d.localId, "scope", e.target.value as ControlScope)}
                   size="small"
                   variant="standard"
-                  sx={{ fontSize: "0.8rem" }}
+                  sx={{ ...FS }}
                 >
                   <MenuItem value="COMMON">Common</MenuItem>
                   <MenuItem value="PRODUCT_SPECIFIC">Product Specific</MenuItem>
                 </Select>
               </TableCell>
+              {/* Process Owner — searchable */}
+              <TableCell>
+                <Autocomplete
+                  size="small"
+                  options={users}
+                  getOptionLabel={(u) => u.displayName}
+                  isOptionEqualToValue={(a, b) => a.id === b.id}
+                  value={users.find((u) => u.id === d.ownerId) ?? null}
+                  onChange={(_e, val) => update(d.localId, "ownerId", val?.id ?? null)}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      variant="standard"
+                      placeholder="Search…"
+                      inputProps={{ ...params.inputProps, style: FS }}
+                    />
+                  )}
+                  sx={{ minWidth: 135 }}
+                  slotProps={{ paper: paperProps }}
+                />
+              </TableCell>
+              {/* Auditor POC — searchable (all users; external auditor filtering requires role sync) */}
+              <TableCell>
+                <Autocomplete
+                  size="small"
+                  options={users}
+                  getOptionLabel={(u) => u.displayName}
+                  isOptionEqualToValue={(a, b) => a.id === b.id}
+                  value={users.find((u) => u.id === d.auditorId) ?? null}
+                  onChange={(_e, val) => update(d.localId, "auditorId", val?.id ?? null)}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      variant="standard"
+                      placeholder="Search…"
+                      inputProps={{ ...params.inputProps, style: FS }}
+                    />
+                  )}
+                  sx={{ minWidth: 135 }}
+                  slotProps={{ paper: paperProps }}
+                />
+              </TableCell>
+              {/* Team */}
+              <TableCell>
+                <Select
+                  value={d.teamId !== null ? String(d.teamId) : ""}
+                  onChange={(e) => {
+                    const v = e.target.value as string;
+                    update(d.localId, "teamId", v === "" ? null : Number(v));
+                  }}
+                  size="small"
+                  variant="standard"
+                  displayEmpty
+                  sx={{ ...FS, minWidth: 110 }}
+                >
+                  <MenuItem value=""><em style={{ color: "#9e9e9e" }}>None</em></MenuItem>
+                  {teams.map((t) => (
+                    <MenuItem key={t.id} value={String(t.id)} sx={FS}>
+                      {t.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </TableCell>
+              {/* Due Date — at the end */}
               <TableCell>
                 <TextField
                   value={d.dueDate}
@@ -286,7 +592,7 @@ function EditableControlsTable({ drafts, onChange }: EditableControlsTableProps)
                   size="small"
                   variant="standard"
                   InputLabelProps={{ shrink: true }}
-                  inputProps={{ style: { fontSize: "0.8rem" } }}
+                  inputProps={{ style: FS }}
                 />
               </TableCell>
               <TableCell>
@@ -302,6 +608,28 @@ function EditableControlsTable({ drafts, onChange }: EditableControlsTableProps)
       </Table>
     </TableContainer>
     </Paper>
+
+    {/* Population details dialog — rendered outside the table to avoid z-index issues */}
+    {dialogDraft && (
+      <PopulationDialog
+        open={Boolean(populationDialogId)}
+        controlDraft={dialogDraft}
+        onClose={() => setPopulationDialogId(null)}
+        onChangePopulation={(p) => {
+          onChange(drafts.map((d) =>
+            d.localId === populationDialogId ? { ...d, population: p } : d,
+          ));
+        }}
+        onChangeAssignment={(field, val) => {
+          onChange(drafts.map((d) =>
+            d.localId === populationDialogId ? { ...d, [field]: val } : d,
+          ));
+        }}
+        users={users}
+        teams={teams}
+      />
+    )}
+    </>
   );
 }
 
@@ -325,9 +653,10 @@ function SourceCard({ icon, title, description, selected, onClick }: SourceCardP
         borderWidth: selected ? 2 : 1,
         transition: "border-color 0.15s, box-shadow 0.15s",
         boxShadow: selected ? "0 0 0 3px rgba(25,118,210,0.15)" : "none",
+        height: "100%",
       }}
     >
-      <CardActionArea onClick={onClick} sx={{ p: 0 }}>
+      <CardActionArea onClick={onClick} sx={{ p: 0, height: "100%" }}>
         <CardContent sx={{ display: "flex", alignItems: "flex-start", gap: 2 }}>
           <Box
             sx={{
@@ -379,6 +708,9 @@ interface Step1Props {
   onScopeDescriptionChange: (v: string) => void;
 }
 
+const CREATE_FW_SENTINEL: AuditFramework = { id: -1, name: "＋ Create new framework…", version: null };
+const CREATE_PRODUCT_SENTINEL: AuditProduct = { id: -1, name: "＋ Create new product…" };
+
 function Step1Form({
   name,
   framework,
@@ -397,6 +729,48 @@ function Step1Form({
   onPeriodEndChange,
   onScopeDescriptionChange,
 }: Step1Props): JSX.Element {
+  const createFramework = useCreateFramework();
+  const createProduct = useCreateProduct();
+
+  const [fwDialogOpen, setFwDialogOpen] = useState(false);
+  const [newFwName, setNewFwName] = useState("");
+  const [newFwVersion, setNewFwVersion] = useState("");
+  const [fwError, setFwError] = useState<string | null>(null);
+
+  const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [newProductName, setNewProductName] = useState("");
+  const [productError, setProductError] = useState<string | null>(null);
+
+  async function handleCreateFramework() {
+    if (!newFwName.trim()) return;
+    setFwError(null);
+    try {
+      const created = await createFramework.mutateAsync({
+        name: newFwName.trim(),
+        version: newFwVersion.trim() || null,
+      });
+      onFrameworkChange(created);
+      setFwDialogOpen(false);
+      setNewFwName("");
+      setNewFwVersion("");
+    } catch (err) {
+      setFwError(err instanceof Error ? err.message : "Failed to create framework.");
+    }
+  }
+
+  async function handleCreateProduct() {
+    if (!newProductName.trim()) return;
+    setProductError(null);
+    try {
+      const created = await createProduct.mutateAsync({ name: newProductName.trim() });
+      onProductChange(created);
+      setProductDialogOpen(false);
+      setNewProductName("");
+    } catch (err) {
+      setProductError(err instanceof Error ? err.message : "Failed to create product.");
+    }
+  }
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <TextField
@@ -410,19 +784,89 @@ function Step1Form({
 
       <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
         <Autocomplete
-          options={frameworks}
+          options={[...frameworks, CREATE_FW_SENTINEL]}
           loading={loadingFrameworks}
-          getOptionLabel={(f) => (f.version ? `${f.name} (${f.version})` : f.name)}
+          getOptionLabel={(f) =>
+            f.id === -1 ? f.name : f.version ? `${f.name} (${f.version})` : f.name
+          }
+          isOptionEqualToValue={(opt, val) => opt.id === val.id}
+          filterOptions={(options, params) => {
+            const real = options.filter((o) => o.id !== -1);
+            const q = params.inputValue.toLowerCase();
+            const filtered = q
+              ? real.filter((o) =>
+                  (o.version ? `${o.name} (${o.version})` : o.name).toLowerCase().includes(q),
+                )
+              : real;
+            return [...filtered, CREATE_FW_SENTINEL];
+          }}
           value={framework}
-          onChange={(_e, val) => onFrameworkChange(val)}
+          onChange={(_e, val) => {
+            if (val && val.id === -1) {
+              setNewFwName("");
+              setFwError(null);
+              setFwDialogOpen(true);
+              return;
+            }
+            onFrameworkChange(val);
+          }}
+          slotProps={{ paper: { sx: { backdropFilter: "none", backgroundColor: "background.paper" } } }}
+          renderOption={(props, option) => {
+            const { key, ...rest } = props as React.HTMLAttributes<HTMLLIElement> & { key?: React.Key };
+            if (option.id === -1) {
+              return (
+                <li key={key} {...rest}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, color: "primary.main" }}>
+                    <Plus size={14} />
+                    <Typography variant="body2" fontWeight={600}>Create new framework</Typography>
+                  </Box>
+                </li>
+              );
+            }
+            return (
+              <li key={key} {...rest}>
+                {option.version ? `${option.name} (${option.version})` : option.name}
+              </li>
+            );
+          }}
           renderInput={(params) => <TextField {...params} label="Framework" required />}
         />
         <Autocomplete
-          options={products}
+          options={[...products, CREATE_PRODUCT_SENTINEL]}
           loading={loadingProducts}
           getOptionLabel={(p) => p.name}
+          isOptionEqualToValue={(opt, val) => opt.id === val.id}
+          filterOptions={(options, params) => {
+            const real = options.filter((o) => o.id !== -1);
+            const q = params.inputValue.toLowerCase();
+            const filtered = q ? real.filter((o) => o.name.toLowerCase().includes(q)) : real;
+            return [...filtered, CREATE_PRODUCT_SENTINEL];
+          }}
           value={product}
-          onChange={(_e, val) => onProductChange(val)}
+          onChange={(_e, val) => {
+            if (val && val.id === -1) {
+              setNewProductName("");
+              setProductError(null);
+              setProductDialogOpen(true);
+              return;
+            }
+            onProductChange(val);
+          }}
+          slotProps={{ paper: { sx: { backdropFilter: "none", backgroundColor: "background.paper" } } }}
+          renderOption={(props, option) => {
+            const { key, ...rest } = props as React.HTMLAttributes<HTMLLIElement> & { key?: React.Key };
+            if (option.id === -1) {
+              return (
+                <li key={key} {...rest}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, color: "primary.main" }}>
+                    <Plus size={14} />
+                    <Typography variant="body2" fontWeight={600}>Create new product</Typography>
+                  </Box>
+                </li>
+              );
+            }
+            return <li key={key} {...rest}>{option.name}</li>;
+          }}
           renderInput={(params) => <TextField {...params} label="Product / System" required />}
         />
       </Box>
@@ -453,8 +897,80 @@ function Step1Form({
         multiline
         rows={3}
         fullWidth
-        placeholder="Optional — describe what systems, processes, or criteria are in scope."
+        placeholder="Optional - describe what systems, processes, or criteria are in scope."
       />
+
+      {/* Create Framework Dialog */}
+      <Dialog open={fwDialogOpen} onClose={() => setFwDialogOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Create New Framework</DialogTitle>
+        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "16px !important" }}>
+          <TextField
+            label="Framework Name"
+            required
+            fullWidth
+            autoFocus
+            value={newFwName}
+            onChange={(e) => setNewFwName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void handleCreateFramework(); }}
+            placeholder="e.g. SOC 2 Type II"
+          />
+          <TextField
+            label="Version (optional)"
+            fullWidth
+            value={newFwVersion}
+            onChange={(e) => setNewFwVersion(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void handleCreateFramework(); }}
+            placeholder="e.g. 2024"
+          />
+          {fwError && <Alert severity="error">{fwError}</Alert>}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setFwDialogOpen(false)} sx={{ textTransform: "none" }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => void handleCreateFramework()}
+            disabled={!newFwName.trim() || createFramework.isPending}
+            startIcon={createFramework.isPending ? <CircularProgress size={14} /> : undefined}
+            sx={{ textTransform: "none" }}
+          >
+            {createFramework.isPending ? "Creating…" : "Create"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Create Product Dialog */}
+      <Dialog open={productDialogOpen} onClose={() => setProductDialogOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Create New Product</DialogTitle>
+        <DialogContent sx={{ pt: "16px !important" }}>
+          <TextField
+            label="Product / System Name"
+            required
+            fullWidth
+            autoFocus
+            value={newProductName}
+            onChange={(e) => setNewProductName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void handleCreateProduct(); }}
+            placeholder="e.g. Identity Platform"
+          />
+          {productError && <Alert severity="error" sx={{ mt: 1.5 }}>{productError}</Alert>}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setProductDialogOpen(false)} sx={{ textTransform: "none" }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => void handleCreateProduct()}
+            disabled={!newProductName.trim() || createProduct.isPending}
+            startIcon={createProduct.isPending ? <CircularProgress size={14} /> : undefined}
+            sx={{ textTransform: "none" }}
+          >
+            {createProduct.isPending ? "Creating…" : "Create"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
@@ -486,6 +1002,10 @@ function Step2Controls({
   const { data: sourceControlsData, isLoading: sourceControlsLoading } = useGetControls(
     copyAuditId ?? 0,
   );
+  const { data: usersData } = useGetUsers();
+  const { data: teamsData } = useGetTeams();
+  const users = usersData ?? [];
+  const teams = teamsData ?? [];
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // When source controls load for "copy" option, populate drafts
@@ -545,7 +1065,7 @@ function Step2Controls({
         <SourceCard
           icon={<FileUp size={22} />}
           title="Upload CSV"
-          description="Upload a CSV with columns: control_number, description, requirement_type, control_type, scope."
+          description="Upload a CSV with columns: control_number, description, evidence_requirement."
           selected={source === "csv"}
           onClick={() => {
             onSourceChange("csv");
@@ -588,7 +1108,13 @@ function Step2Controls({
 
       {/* CSV — file input */}
       {source === "csv" && (
-        <Box>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <Alert severity="info" sx={{ py: 0.5 }}>
+            <strong>Required columns:</strong> control_number, description, evidence_requirement<br />
+            <strong>Optional columns:</strong> requirement_type (DESIGN/OE), control_type, scope, due_date<br />
+            <strong>OE population columns (optional):</strong> population_description, population_due_date, population_comments<br />
+            Process Owner, Auditor POC, and Team must be set manually after upload.
+          </Alert>
           <input
             ref={fileInputRef}
             type="file"
@@ -600,12 +1126,12 @@ function Step2Controls({
             variant="outlined"
             startIcon={<FileUp size={16} />}
             onClick={() => fileInputRef.current?.click()}
-            sx={{ textTransform: "none" }}
+            sx={{ textTransform: "none", alignSelf: "flex-start" }}
           >
             Choose CSV File
           </Button>
           {csvError && (
-            <Alert severity="error" sx={{ mt: 1.5 }}>
+            <Alert severity="error">
               {csvError}
             </Alert>
           )}
@@ -637,7 +1163,7 @@ function Step2Controls({
                 </Button>
               )}
             </Box>
-            <EditableControlsTable drafts={drafts} onChange={onDraftsChange} />
+            <EditableControlsTable drafts={drafts} onChange={onDraftsChange} users={users} teams={teams} />
           </Box>
         )}
     </Box>
@@ -654,6 +1180,8 @@ interface Step3Props {
   periodEnd: string;
   scopeDescription: string;
   drafts: DraftControl[];
+  users: AuditUser[];
+  teams: AuditTeam[];
 }
 
 function Step3Review({
@@ -664,7 +1192,11 @@ function Step3Review({
   periodEnd,
   scopeDescription,
   drafts,
+  users,
+  teams,
 }: Step3Props): JSX.Element {
+  const userById = (id: number | null) => users.find((u) => u.id === id);
+  const teamById = (id: number | null) => teams.find((t) => t.id === id);
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <Paper variant="outlined" sx={{ borderRadius: 2, p: 2.5 }}>
@@ -722,25 +1254,58 @@ function Step3Review({
             No controls — you can add them later via the Control Settings panel.
           </Typography>
         ) : (
-          <TableContainer sx={{ maxHeight: 280 }}>
+          <TableContainer sx={{ maxHeight: 360 }}>
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ fontWeight: 600 }}>#</TableCell>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>Control #</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Description</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Req. Type</TableCell>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>Evidence Requirement</TableCell>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>Req. Type</TableCell>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>Population</TableCell>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>Control Type</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Scope</TableCell>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>Process Owner</TableCell>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>Auditor POC</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Team</TableCell>
+                  <TableCell sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>Due Date</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {drafts.map((d) => (
-                  <TableRow key={d.localId}>
-                    <TableCell>{d.controlNumber || "—"}</TableCell>
-                    <TableCell>{d.description || "—"}</TableCell>
-                    <TableCell>{d.requirementType}</TableCell>
-                    <TableCell>{d.scope === "COMMON" ? "Common" : "Product Specific"}</TableCell>
-                  </TableRow>
-                ))}
+                {drafts.map((d) => {
+                  const owner = userById(d.ownerId);
+                  const auditor = userById(d.auditorId);
+                  const team = teamById(d.teamId);
+                  return (
+                    <TableRow key={d.localId}>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>{d.controlNumber || "—"}</TableCell>
+                      <TableCell sx={{ minWidth: 180 }}>{d.description || "—"}</TableCell>
+                      <TableCell sx={{ minWidth: 160 }}>{d.evidenceRequirement || "—"}</TableCell>
+                      <TableCell>{d.requirementType}</TableCell>
+                      <TableCell sx={{ minWidth: 160 }}>
+                        {d.requirementType === "OE" && d.population ? (
+                          <Typography variant="caption" display="block" noWrap title={d.population.description}>
+                            {d.population.description || <em style={{ color: "#9e9e9e" }}>Not set</em>}
+                          </Typography>
+                        ) : (
+                          <Typography variant="caption" color="text.disabled">—</Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>{d.controlType}</TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        {d.scope === "COMMON" ? "Common" : "Product Specific"}
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        {owner?.displayName ?? "—"}
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        {auditor?.displayName ?? "—"}
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>{team?.name ?? "—"}</TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>{d.dueDate || "—"}</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>
@@ -759,6 +1324,8 @@ export default function CreateAuditPage(): JSX.Element {
 
   const { data: frameworksData, isLoading: loadingFrameworks } = useGetFrameworks();
   const { data: productsData, isLoading: loadingProducts } = useGetProducts();
+  const { data: usersData } = useGetUsers();
+  const { data: teamsData } = useGetTeams();
 
   const createAudit = useCreateAudit();
   const bulkAdd = useBulkAddControls();
@@ -822,7 +1389,7 @@ export default function CreateAuditPage(): JSX.Element {
   const isSubmitting = createAudit.isPending || bulkAdd.isPending;
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 860, mx: "auto" }}>
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1500, mx: "auto" }}>
       {/* Back */}
       <Button
         startIcon={<ChevronLeft size={16} />}
@@ -890,6 +1457,8 @@ export default function CreateAuditPage(): JSX.Element {
             periodEnd={periodEnd}
             scopeDescription={scopeDescription}
             drafts={drafts}
+            users={usersData ?? []}
+            teams={teamsData ?? []}
           />
         )}
       </Paper>

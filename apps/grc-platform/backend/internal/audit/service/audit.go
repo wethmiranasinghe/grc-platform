@@ -34,6 +34,7 @@ type AuditService interface {
 	GetByID(ctx context.Context, id int) (*model.Audit, error)
 	Create(ctx context.Context, req model.CreateAuditRequest, createdBy string) (*model.Audit, error)
 	Update(ctx context.Context, id int, req model.UpdateAuditRequest, updatedBy string) error
+	Delete(ctx context.Context, id int) error
 }
 
 type auditService struct {
@@ -105,4 +106,15 @@ func (s *auditService) Update(ctx context.Context, id int, req model.UpdateAudit
 		return &apierror.Error{StatusCode: http.StatusNotFound, Body: "audit not found"}
 	}
 	return s.repo.Update(ctx, id, req, updatedBy)
+}
+
+func (s *auditService) Delete(ctx context.Context, id int) error {
+	a, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return &apierror.Error{StatusCode: http.StatusNotFound, Body: "audit not found"}
+	}
+	return s.repo.Delete(ctx, id)
 }

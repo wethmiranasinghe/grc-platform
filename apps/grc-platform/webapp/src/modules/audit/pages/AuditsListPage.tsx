@@ -14,7 +14,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { Button as MuiButton, Skeleton } from "@mui/material";
+import {
+  Button as MuiButton,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  Skeleton,
+} from "@mui/material";
 import { Box, Button, Typography } from "@wso2/oxygen-ui";
 import { Plus, ShieldCheck } from "@wso2/oxygen-ui-icons-react";
 import { useState, type JSX } from "react";
@@ -22,6 +30,7 @@ import { useNavigate } from "react-router";
 import AuditCard from "@modules/audit/components/AuditCard";
 import FilterPanel, { type FilterField } from "@modules/audit/components/FilterPanel";
 import { useGetAudits } from "@modules/audit/api/useGetAudits";
+import { useDeleteAudit } from "@modules/audit/api/useDeleteAudit";
 import type { Audit } from "@modules/audit/types/audit";
 
 const EMPTY_AUDIT_FILTERS: Record<string, string[]> = {
@@ -77,8 +86,17 @@ function applyAuditFilters(
 export default function AuditsListPage(): JSX.Element {
   const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useGetAudits();
+  const deleteAudit = useDeleteAudit();
   const [filters, setFilters] = useState<Record<string, string[]>>(EMPTY_AUDIT_FILTERS);
   const [search, setSearch] = useState("");
+  const [auditToDelete, setAuditToDelete] = useState<Audit | null>(null);
+
+  const handleDeleteConfirm = () => {
+    if (!auditToDelete) return;
+    deleteAudit.mutate(auditToDelete.id, {
+      onSuccess: () => setAuditToDelete(null),
+    });
+  };
 
   const audits = data?.items ?? [];
   const filtered = applyAuditFilters(audits, filters, search);
@@ -100,7 +118,7 @@ export default function AuditsListPage(): JSX.Element {
           gap: 2,
         }}
       >
-        <Typography variant="h5" fontWeight={700}>
+        <Typography variant="h4" fontWeight={700}>
           Audits
         </Typography>
         <Button
@@ -171,6 +189,7 @@ export default function AuditsListPage(): JSX.Element {
               key={audit.id}
               audit={audit}
               onClick={() => void navigate(`/audit/audits/${audit.id}`)}
+              onDelete={() => setAuditToDelete(audit)}
             />
           ))}
         </Box>
@@ -196,6 +215,35 @@ export default function AuditsListPage(): JSX.Element {
           </Typography>
         </Box>
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={Boolean(auditToDelete)}
+        onClose={() => setAuditToDelete(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete audit?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            <strong>{auditToDelete?.name}</strong> and all its controls will be permanently deleted.
+            This cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <MuiButton onClick={() => setAuditToDelete(null)} disabled={deleteAudit.isPending}>
+            Cancel
+          </MuiButton>
+          <MuiButton
+            variant="contained"
+            color="error"
+            onClick={handleDeleteConfirm}
+            disabled={deleteAudit.isPending}
+          >
+            {deleteAudit.isPending ? "Deleting…" : "Delete"}
+          </MuiButton>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

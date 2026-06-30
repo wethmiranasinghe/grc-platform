@@ -30,6 +30,8 @@ type Deps struct {
 	Control      auditservice.ControlService
 	Framework    auditservice.FrameworkService
 	User         auditservice.UserService
+	Team         auditservice.TeamService
+	Dashboard    auditservice.DashboardService
 	Evidence     auditservice.EvidenceService
 	Population   auditservice.PopulationService
 	Comment      auditservice.CommentService
@@ -45,6 +47,11 @@ func RegisterRoutes(mux *http.ServeMux, deps Deps) {
 	ch := &controlHandler{svc: deps.Control}
 	fh := &frameworkHandler{svc: deps.Framework}
 	uh := &userHandler{svc: deps.User}
+	th := &teamHandler{svc: deps.Team}
+	dh := &dashboardHandler{svc: deps.Dashboard}
+
+	// Dashboard.
+	mux.HandleFunc("GET /api/v1/audit/dashboard", dh.getDashboard)
 
 	// Lookup data for Create Audit form dropdowns.
 	mux.HandleFunc("GET /api/v1/audit/frameworks", fh.listFrameworks)
@@ -52,12 +59,14 @@ func RegisterRoutes(mux *http.ServeMux, deps Deps) {
 	mux.HandleFunc("GET /api/v1/audit/products", fh.listProducts)
 	mux.HandleFunc("POST /api/v1/audit/products", fh.createProduct)
 	mux.HandleFunc("GET /api/v1/audit/users", uh.listUsers)
+	mux.HandleFunc("GET /api/v1/audit/teams", th.listTeams)
 
 	// Audit CRUD.
 	mux.HandleFunc("GET /api/v1/audits", ah.listAudits)
 	mux.HandleFunc("POST /api/v1/audits", ah.createAudit)
 	mux.HandleFunc("GET /api/v1/audits/{id}", ah.getAudit)
 	mux.HandleFunc("PUT /api/v1/audits/{id}", ah.updateAudit)
+	mux.HandleFunc("DELETE /api/v1/audits/{id}", ah.deleteAudit)
 
 	// Control CRUD + status transitions.
 	// Note: /bulk must be registered before /{controlId} so the router matches it first.

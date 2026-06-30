@@ -29,6 +29,7 @@ type AuditRepository interface {
 	GetByID(ctx context.Context, id int) (*model.Audit, error)
 	Create(ctx context.Context, req model.CreateAuditRequest, createdBy string) (*model.Audit, error)
 	Update(ctx context.Context, id int, req model.UpdateAuditRequest, updatedBy string) error
+	Delete(ctx context.Context, id int) error
 }
 
 // FrameworkRepository is the data-access contract for audit frameworks.
@@ -59,6 +60,16 @@ type ControlRepository interface {
 // UserRepository is the data-access contract for the shared user list (owner/auditor dropdowns).
 type UserRepository interface {
 	List(ctx context.Context) ([]*model.UserRef, error)
+}
+
+// TeamRepository is the data-access contract for the audit team list.
+type TeamRepository interface {
+	List(ctx context.Context) ([]*model.AuditTeam, error)
+}
+
+// DashboardRepository aggregates cross-cutting dashboard stats and action items.
+type DashboardRepository interface {
+	Get(ctx context.Context, f model.DashboardFilter) (*model.DashboardData, error)
 }
 
 // These remain empty — add methods as their handlers are implemented.

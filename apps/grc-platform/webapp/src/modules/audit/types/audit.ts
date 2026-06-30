@@ -47,6 +47,11 @@ export interface AuditProduct {
   name: string;
 }
 
+export interface AuditTeam {
+  id: number;
+  name: string;
+}
+
 export interface ControlCounts {
   total: number;
   approved: number;
@@ -122,6 +127,13 @@ export interface CreateAuditRequest {
   scopeDescription?: string | null;
 }
 
+export interface PopulationDetails {
+  description: string;
+  referenceNumber?: number | null;
+  dueDate?: string | null;
+  comments?: string | null;
+}
+
 export interface AddControlRequest {
   controlNumber: string;
   description: string;
@@ -134,6 +146,7 @@ export interface AddControlRequest {
   teamId?: number | null;
   auditorId?: number | null;
   isManuallyAdded: boolean;
+  population?: PopulationDetails | null;
 }
 
 export interface UpdateControlRequest {

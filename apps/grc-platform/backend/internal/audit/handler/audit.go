@@ -93,6 +93,19 @@ func (h *auditHandler) updateAudit(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// deleteAudit handles DELETE /api/v1/audits/{id}.
+func (h *auditHandler) deleteAudit(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseIntParam(w, r, "id")
+	if !ok {
+		return
+	}
+	if err := h.svc.Delete(r.Context(), id); err != nil {
+		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // parseIntParam extracts a named path value and writes a 400 on failure.
 func parseIntParam(w http.ResponseWriter, r *http.Request, name string) (int, bool) {
 	s := r.PathValue(name)

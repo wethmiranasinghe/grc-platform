@@ -19,12 +19,16 @@ import {
   CardActionArea,
   CardContent,
   Divider,
+  IconButton,
   LinearProgress,
+  ListItemIcon,
+  Menu,
+  MenuItem,
   Stack,
 } from "@mui/material";
 import { Box, Typography } from "@wso2/oxygen-ui";
-import { CalendarDays } from "@wso2/oxygen-ui-icons-react";
-import type { JSX } from "react";
+import { CalendarDays, MoreVertical, Trash2 } from "@wso2/oxygen-ui-icons-react";
+import { type JSX, useState } from "react";
 import AuditStatusChip from "@modules/audit/components/AuditStatusChip";
 import { formatDateRange } from "@modules/audit/utils/format";
 import type { Audit } from "@modules/audit/types/audit";
@@ -32,31 +36,62 @@ import type { Audit } from "@modules/audit/types/audit";
 interface AuditCardProps {
   audit: Audit;
   onClick: () => void;
+  onDelete: () => void;
 }
 
-export default function AuditCard({ audit, onClick }: AuditCardProps): JSX.Element {
+export default function AuditCard({ audit, onClick, onDelete }: AuditCardProps): JSX.Element {
   const { controlCounts } = audit;
   const approvedPct =
     controlCounts.total > 0
       ? Math.round((controlCounts.approved / controlCounts.total) * 100)
       : 0;
 
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+
+  const handleMenuOpen = (e: React.MouseEvent<HTMLElement>) => {
+    setMenuAnchor(e.currentTarget);
+  };
+  const handleDelete = () => {
+    setMenuAnchor(null);
+    onDelete();
+  };
+
   return (
     <Card
       variant="outlined"
       sx={{
         height: "100%",
+        position: "relative",
         transition: "box-shadow 0.2s",
         "&:hover": { boxShadow: 4 },
       }}
     >
+      {/* Menu button sits outside CardActionArea so it doesn't trigger card navigation */}
+      <Box sx={{ position: "absolute", top: 8, right: 8, zIndex: 1 }}>
+        <IconButton size="small" onClick={handleMenuOpen} sx={{ color: "text.secondary" }}>
+          <MoreVertical size={16} />
+        </IconButton>
+      </Box>
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={() => setMenuAnchor(null)}
+      >
+        <MenuItem onClick={handleDelete} sx={{ color: "error.main" }}>
+          <ListItemIcon sx={{ color: "error.main" }}>
+            <Trash2 size={16} />
+          </ListItemIcon>
+          Delete audit
+        </MenuItem>
+      </Menu>
+
       <CardActionArea
         onClick={onClick}
         sx={{ height: "100%", alignItems: "flex-start" }}
       >
         <CardContent sx={{ height: "100%", display: "flex", flexDirection: "column", gap: 1.5, p: 2.5 }}>
-          {/* Top row: status chip */}
-          <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+          {/* Top row: status chip — leave space on right for the absolute menu button */}
+          <Box sx={{ display: "flex", alignItems: "center", pr: 3.5 }}>
             <AuditStatusChip status={audit.status} />
           </Box>
 

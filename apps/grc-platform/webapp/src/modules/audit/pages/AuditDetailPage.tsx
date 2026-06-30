@@ -361,37 +361,38 @@ export default function AuditDetailPage(): JSX.Element {
           searchPlaceholder="Search by control number or description..."
         />
 
-        {/* Active filter chips */}
-        {activeFilterCount(filters) > 0 && (
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1, alignItems: "center" }}>
-            {Object.entries(filters).flatMap(([key, values]) =>
-              values.map((value) => (
-                <Chip
-                  key={`${key}:${value}`}
-                  label={`${FILTER_COLUMN_LABELS[key]}: ${getFilterValueLabel(key, value)}`}
-                  size="small"
-                  onDelete={() =>
-                    handleFilterChange({ ...filters, [key]: filters[key].filter((v) => v !== value) })
-                  }
-                  sx={{ fontSize: "0.78rem" }}
-                />
-              ))
-            )}
-            <MuiButton
-              size="small"
-              onClick={() => handleFilterChange(EMPTY_CONTROL_FILTERS)}
-              sx={{ textTransform: "none", fontSize: "0.78rem", color: "text.secondary" }}
-            >
-              Clear all
-            </MuiButton>
-          </Box>
-        )}
-
-        {isFiltered && (
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: "block" }}>
-            {filteredControls.length} of {controls.length} controls
-          </Typography>
-        )}
+        {/* Active filter chips — always rendered to prevent layout shift */}
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 1, alignItems: "center", minHeight: 28 }}>
+          {activeFilterCount(filters) > 0 && (
+            <>
+              {Object.entries(filters).flatMap(([key, values]) =>
+                values.map((value) => (
+                  <Chip
+                    key={`${key}:${value}`}
+                    label={`${FILTER_COLUMN_LABELS[key]}: ${getFilterValueLabel(key, value)}`}
+                    size="small"
+                    onDelete={() =>
+                      handleFilterChange({ ...filters, [key]: filters[key].filter((v) => v !== value) })
+                    }
+                    sx={{ fontSize: "0.78rem" }}
+                  />
+                ))
+              )}
+              <MuiButton
+                size="small"
+                onClick={() => handleFilterChange(EMPTY_CONTROL_FILTERS)}
+                sx={{ textTransform: "none", fontSize: "0.78rem", color: "text.secondary" }}
+              >
+                Clear all
+              </MuiButton>
+              {isFiltered && (
+                <Typography variant="caption" color="text.secondary" sx={{ ml: "auto" }}>
+                  {filteredControls.length} of {controls.length} controls
+                </Typography>
+              )}
+            </>
+          )}
+        </Box>
       </Box>
 
       {/* Controls table */}

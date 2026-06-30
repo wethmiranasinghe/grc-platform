@@ -53,19 +53,29 @@ type ControlListResponse struct {
 	Total int             `json:"total"`
 }
 
+// PopulationDetails is included in AddControlRequest for OE-type controls.
+// It maps to a row in audit_population.
+type PopulationDetails struct {
+	Description     string  `json:"description"`
+	ReferenceNumber *int    `json:"referenceNumber"`
+	DueDate         *string `json:"dueDate"`
+	Comments        *string `json:"comments"`
+}
+
 // AddControlRequest is the payload for POST /api/v1/audits/{id}/controls.
 type AddControlRequest struct {
-	ControlNumber       string  `json:"controlNumber"`
-	Description         string  `json:"description"`
-	EvidenceRequirement *string `json:"evidenceRequirement"`
-	RequirementType     string  `json:"requirementType"` // DESIGN | OE
-	ControlType         string  `json:"controlType"`     // CONFIG | NON_CONFIG
-	Scope               string  `json:"scope"`           // COMMON | PRODUCT_SPECIFIC
-	OwnerID             *int    `json:"ownerId"`
-	TeamID              *int    `json:"teamId"`
-	AuditorID           *int    `json:"auditorId"`
-	DueDate             *string `json:"dueDate"`
-	IsManuallyAdded     bool    `json:"isManuallyAdded"`
+	ControlNumber       string             `json:"controlNumber"`
+	Description         string             `json:"description"`
+	EvidenceRequirement *string            `json:"evidenceRequirement"`
+	RequirementType     string             `json:"requirementType"` // DESIGN | OE
+	ControlType         string             `json:"controlType"`     // CONFIG | NON_CONFIG
+	Scope               string             `json:"scope"`           // COMMON | PRODUCT_SPECIFIC
+	OwnerID             *int               `json:"ownerId"`
+	TeamID              *int               `json:"teamId"`
+	AuditorID           *int               `json:"auditorId"`
+	DueDate             *string            `json:"dueDate"`
+	IsManuallyAdded     bool               `json:"isManuallyAdded"`
+	Population          *PopulationDetails `json:"population"` // OE controls only
 }
 
 // BulkAddControlsRequest is the payload for POST /api/v1/audits/{id}/controls/bulk.

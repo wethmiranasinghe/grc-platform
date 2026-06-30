@@ -113,6 +113,33 @@ func (r *controlRepository) Create(ctx context.Context, auditID int, req model.A
 		return nil, fmt.Errorf("control.Create: %w", err)
 	}
 	id64, _ := res.LastInsertId()
+
+	if req.RequirementType == "OE" {
+		var desc string
+		var refNum *int
+		var dueDate, comments *string
+		if req.Population != nil {
+			desc = req.Population.Description
+			refNum = req.Population.ReferenceNumber
+			dueDate = req.Population.DueDate
+			comments = req.Population.Comments
+		}
+		_, err = r.db.ExecContext(ctx, `
+			INSERT INTO audit_population
+			  (audit_id, control_id, description, reference_number, due_date, comments, created_by, updated_by)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			auditID, id64,
+			desc,
+			intPtrVal(refNum),
+			stringPtrVal(dueDate),
+			stringPtrVal(comments),
+			createdBy, createdBy,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("control.Create population: %w", err)
+		}
+	}
+
 	return r.GetByID(ctx, auditID, int(id64))
 }
 

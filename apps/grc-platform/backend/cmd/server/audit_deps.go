@@ -37,18 +37,24 @@ func buildAuditDeps(db *sql.DB, fileSvc *file.Service) audithandler.Deps {
 	frameworkRepo := auditmysql.NewFrameworkRepository(db)
 	productRepo   := auditmysql.NewProductRepository(db)
 	userRepo      := auditmysql.NewUserRepository(db)
+	teamRepo      := auditmysql.NewTeamRepository(db)
+	dashboardRepo := auditmysql.NewDashboardRepository(db)
 
 	// ── Services ──────────────────────────────────────────────────────────────
 	auditSvc     := auditservice.NewAuditService(auditRepo, frameworkRepo, productRepo)
 	controlSvc   := auditservice.NewControlService(controlRepo)
 	frameworkSvc := auditservice.NewFrameworkService(frameworkRepo, productRepo)
 	userSvc      := auditservice.NewUserService(userRepo)
+	teamSvc      := auditservice.NewTeamService(teamRepo)
+	dashboardSvc := auditservice.NewDashboardService(dashboardRepo)
 
 	return audithandler.Deps{
 		Audit:     auditSvc,
 		Control:   controlSvc,
 		Framework: frameworkSvc,
 		User:      userSvc,
+		Team:      teamSvc,
+		Dashboard: dashboardSvc,
 		// Evidence, Population, Comment, Review, Assignment, Trail, Notification
 		// are wired here as their implementations are added.
 	}
