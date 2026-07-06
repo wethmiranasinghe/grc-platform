@@ -17,12 +17,14 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/wso2-open-operations/grc-platform/backend/internal/response"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/risk/model"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/shared/auth"
+	"github.com/wso2-open-operations/grc-platform/backend/internal/shared/privilege"
 )
 
 // handleNextSequenceID serves GET /api/v1/risks/next-sequence-id.
@@ -30,6 +32,9 @@ import (
 // Returns a preview of the next available sequence number for the risk code.
 // This does not reserve the number — the actual code is assigned atomically on POST.
 func (d *Deps) handleNextSequenceID(w http.ResponseWriter, r *http.Request) {
+	if !auth.RequirePrivilege(r.Context(), w, privilege.CreateRisk) {
+		return
+	}
 	q := r.URL.Query()
 
 	sourceRegisterIDStr := q.Get("source_register_id")
@@ -53,7 +58,7 @@ func (d *Deps) handleNextSequenceID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nextID, err := d.Risk.NextSequenceID(r.Context(), sourceRegisterID, year, quarter)
+	nextID, err := d.Risk.NextSequenceID(r.Context(), sourceRegisterID)
 	if err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
@@ -69,6 +74,9 @@ func (d *Deps) handleCreateRisk(w http.ResponseWriter, r *http.Request) {
 	user := auth.FromContext(r.Context())
 	if user == nil {
 		response.WriteError(w, http.StatusUnauthorized, response.ErrMsgUnauthorized)
+		return
+	}
+	if !auth.RequirePrivilege(r.Context(), w, privilege.CreateRisk) {
 		return
 	}
 
@@ -92,6 +100,7 @@ func (d *Deps) handleCreateRisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Location", fmt.Sprintf("/api/v1/risks/%d", result.ID))
 	response.WriteJSONValue(w, http.StatusCreated, result)
 }
 

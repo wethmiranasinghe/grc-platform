@@ -20,6 +20,7 @@ import { type JSX, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { auditNav } from "@modules/audit/nav";
 import { riskNav } from "@modules/risk/nav";
+import { useRiskPrivileges } from "@modules/risk/hooks/useRiskPrivileges";
 
 // Each module registers its own NavSection (modules/<module>/nav.ts). To add a
 // new module's section, import its nav here and append it — no other change.
@@ -44,6 +45,13 @@ export default function SideBar({
 }: SideBarProps): JSX.Element {
   const location = useLocation();
   const navigate = useNavigate();
+  const { can: canRisk, loading: riskPrivsLoading } = useRiskPrivileges();
+
+  // Map section id → privilege resolver. Add an entry here when a new module
+  // introduces nav items with requiredPrivilege.
+  const sectionPrivs: Record<string, { can: (p: string) => boolean; loading: boolean }> = {
+    risk: { can: canRisk, loading: riskPrivsLoading },
+  };
 
   // When true, the sidebar is temporarily expanded from collapsed state on click.
   const [tempExpanded, setTempExpanded] = useState(false);
@@ -121,25 +129,32 @@ export default function SideBar({
       >
         <Sidebar.Nav>
           <Sidebar.Category>
-            {SECTIONS.map((section, idx) => (
-              <Box key={section.id}>
-                {idx > 0 && <Divider sx={{ my: 1, mx: 1.5 }} />}
-                <Sidebar.Item id={section.id}>
-                <Sidebar.ItemIcon>
-                  <section.icon size={20} />
-                </Sidebar.ItemIcon>
-                <Sidebar.ItemLabel>{section.label}</Sidebar.ItemLabel>
-                {section.items.map((item) => (
-                  <Sidebar.Item key={item.id} id={item.id}>
+            {SECTIONS.map((section, idx) => {
+              const privs = sectionPrivs[section.id];
+              const visibleItems = section.items.filter((item) => {
+                if (!item.requiredPrivilege || !privs) return true;
+                return !privs.loading && privs.can(item.requiredPrivilege);
+              });
+              return (
+                <Box key={section.id}>
+                  {idx > 0 && <Divider sx={{ my: 1, mx: 1.5 }} />}
+                  <Sidebar.Item id={section.id}>
                     <Sidebar.ItemIcon>
-                      <item.icon size={20} />
+                      <section.icon size={20} />
                     </Sidebar.ItemIcon>
-                    <Sidebar.ItemLabel>{item.label}</Sidebar.ItemLabel>
+                    <Sidebar.ItemLabel>{section.label}</Sidebar.ItemLabel>
+                    {visibleItems.map((item) => (
+                      <Sidebar.Item key={item.id} id={item.id}>
+                        <Sidebar.ItemIcon>
+                          <item.icon size={20} />
+                        </Sidebar.ItemIcon>
+                        <Sidebar.ItemLabel>{item.label}</Sidebar.ItemLabel>
+                      </Sidebar.Item>
+                    ))}
                   </Sidebar.Item>
-                ))}
-                </Sidebar.Item>
-              </Box>
-            ))}
+                </Box>
+              );
+            })}
           </Sidebar.Category>
         </Sidebar.Nav>
       </Sidebar>
