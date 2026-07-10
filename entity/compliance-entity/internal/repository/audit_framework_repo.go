@@ -76,7 +76,10 @@ func (r *auditFrameworkRepo) SearchAuditFrameworks(ctx context.Context, req doma
 		}
 		frameworks = append(frameworks, *f)
 	}
-	return frameworks, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("audit_framework.Search rows: %w", err)
+	}
+	return frameworks, total, nil
 }
 
 func (r *auditFrameworkRepo) GetAuditFrameworkByID(ctx context.Context, id int) (*domain.AuditFramework, error) {

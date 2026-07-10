@@ -84,7 +84,10 @@ func (r *riskTeamRepo) SearchRiskTeams(ctx context.Context, req domain.SearchRis
 		}
 		teams = append(teams, *t)
 	}
-	return teams, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("risk_team.Search rows: %w", err)
+	}
+	return teams, total, nil
 }
 
 func (r *riskTeamRepo) GetRiskTeamByID(ctx context.Context, id int) (*domain.RiskTeam, error) {

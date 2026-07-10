@@ -58,15 +58,17 @@ var validTreatmentStrategies = map[string]bool{"MITIGATE": true, "ACCEPT": true,
 var validIdentifiedByTypes = map[string]bool{"EMPLOYEE": true, "EXTERNAL_PERSON": true, "TOOL": true}
 
 func (s *riskService) SearchRisks(ctx context.Context, req domain.SearchRisksRequest) (domain.SearchRisksResponse, error) {
-	for _, sk := range req.WorkflowStatusKeys {
+	for i, sk := range req.WorkflowStatusKeys {
 		if !validRiskStatuses[strings.ToUpper(sk)] {
 			return domain.SearchRisksResponse{}, &apierror.ValidationError{Msg: "invalid workflowStatusKey: " + sk}
 		}
+		req.WorkflowStatusKeys[i] = strings.ToUpper(sk)
 	}
-	for _, qk := range req.RiskQuarterKeys {
+	for i, qk := range req.RiskQuarterKeys {
 		if !validRiskQuarters[strings.ToUpper(qk)] {
 			return domain.SearchRisksResponse{}, &apierror.ValidationError{Msg: "invalid riskQuarterKey: " + qk + " (must be Q1, Q2, Q3, or Q4)"}
 		}
+		req.RiskQuarterKeys[i] = strings.ToUpper(qk)
 	}
 	normalizePagination(&req.Pagination)
 	risks, total, err := s.repo.SearchRisks(ctx, req)
@@ -109,14 +111,23 @@ func (s *riskService) CreateRisk(ctx context.Context, req domain.CreateRiskReque
 	if req.RiskYear <= 0 {
 		return domain.Risk{}, &apierror.ValidationError{Msg: "riskYear is required"}
 	}
-	if !validRiskQuarters[strings.ToUpper(req.RiskQuarter)] {
+	req.RiskQuarter = strings.ToUpper(req.RiskQuarter)
+	if !validRiskQuarters[req.RiskQuarter] {
 		return domain.Risk{}, &apierror.ValidationError{Msg: "riskQuarter must be Q1, Q2, Q3, or Q4"}
 	}
 	if req.TreatmentStrategy != nil && !validTreatmentStrategies[strings.ToUpper(*req.TreatmentStrategy)] {
 		return domain.Risk{}, &apierror.ValidationError{Msg: "treatmentStrategy must be MITIGATE, ACCEPT, TRANSFER, or VOID"}
 	}
+	if req.TreatmentStrategy != nil {
+		up := strings.ToUpper(*req.TreatmentStrategy)
+		req.TreatmentStrategy = &up
+	}
 	if req.IdentifiedByType != nil && !validIdentifiedByTypes[strings.ToUpper(*req.IdentifiedByType)] {
 		return domain.Risk{}, &apierror.ValidationError{Msg: "identifiedByType must be EMPLOYEE, EXTERNAL_PERSON, or TOOL"}
+	}
+	if req.IdentifiedByType != nil {
+		up := strings.ToUpper(*req.IdentifiedByType)
+		req.IdentifiedByType = &up
 	}
 	if req.CreatedBy == "" {
 		return domain.Risk{}, &apierror.ValidationError{Msg: "createdBy is required"}
@@ -138,6 +149,10 @@ func (s *riskService) UpdateRisk(ctx context.Context, id int, req domain.UpdateR
 	if req.WorkflowStatus != nil && !validRiskStatuses[strings.ToUpper(*req.WorkflowStatus)] {
 		return domain.Risk{}, &apierror.ValidationError{Msg: "invalid workflowStatus: " + *req.WorkflowStatus}
 	}
+	if req.WorkflowStatus != nil {
+		up := strings.ToUpper(*req.WorkflowStatus)
+		req.WorkflowStatus = &up
+	}
 	// TODO(risk-workflow): enforce the risk workflow_status TRANSITION rules here,
 	// the same way audit_control_service.go / audit_evidence_service.go do it.
 	// Currently only enum-membership is checked above, so a caller can jump to any
@@ -153,6 +168,10 @@ func (s *riskService) UpdateRisk(ctx context.Context, id int, req domain.UpdateR
 	// See isValidControlTransition for the pattern to copy.
 	if req.TreatmentStrategy != nil && !validTreatmentStrategies[strings.ToUpper(*req.TreatmentStrategy)] {
 		return domain.Risk{}, &apierror.ValidationError{Msg: "treatmentStrategy must be MITIGATE, ACCEPT, TRANSFER, or VOID"}
+	}
+	if req.TreatmentStrategy != nil {
+		up := strings.ToUpper(*req.TreatmentStrategy)
+		req.TreatmentStrategy = &up
 	}
 	r, err := s.repo.UpdateRisk(ctx, id, req)
 	if err != nil {

@@ -37,7 +37,7 @@ func NewRiskActionStepHandler(svc service.RiskActionStepService) *RiskActionStep
 // CreateRiskActionStep handles POST /action-plans/{planId}/steps.
 func (h *RiskActionStepHandler) CreateRiskActionStep(w http.ResponseWriter, r *http.Request) {
 	planID, err := strconv.Atoi(r.PathValue("planId"))
-	if err != nil {
+	if err != nil || planID <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "planId must be a positive integer"})
 		return
 	}
@@ -58,7 +58,7 @@ func (h *RiskActionStepHandler) CreateRiskActionStep(w http.ResponseWriter, r *h
 // ListRiskActionSteps handles GET /action-plans/{planId}/steps.
 func (h *RiskActionStepHandler) ListRiskActionSteps(w http.ResponseWriter, r *http.Request) {
 	planID, err := strconv.Atoi(r.PathValue("planId"))
-	if err != nil {
+	if err != nil || planID <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "planId must be a positive integer"})
 		return
 	}
@@ -74,12 +74,12 @@ func (h *RiskActionStepHandler) ListRiskActionSteps(w http.ResponseWriter, r *ht
 // GetRiskActionStepByID handles GET /action-plans/{planId}/steps/{stepId}.
 func (h *RiskActionStepHandler) GetRiskActionStepByID(w http.ResponseWriter, r *http.Request) {
 	planID, err := strconv.Atoi(r.PathValue("planId"))
-	if err != nil {
+	if err != nil || planID <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "planId must be a positive integer"})
 		return
 	}
 	stepID, err := strconv.Atoi(r.PathValue("stepId"))
-	if err != nil {
+	if err != nil || stepID <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "stepId must be a positive integer"})
 		return
 	}
@@ -95,12 +95,12 @@ func (h *RiskActionStepHandler) GetRiskActionStepByID(w http.ResponseWriter, r *
 // UpdateRiskActionStep handles PATCH /action-plans/{planId}/steps/{stepId}.
 func (h *RiskActionStepHandler) UpdateRiskActionStep(w http.ResponseWriter, r *http.Request) {
 	planID, err := strconv.Atoi(r.PathValue("planId"))
-	if err != nil {
+	if err != nil || planID <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "planId must be a positive integer"})
 		return
 	}
 	stepID, err := strconv.Atoi(r.PathValue("stepId"))
-	if err != nil {
+	if err != nil || stepID <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "stepId must be a positive integer"})
 		return
 	}
@@ -120,12 +120,12 @@ func (h *RiskActionStepHandler) UpdateRiskActionStep(w http.ResponseWriter, r *h
 // DeleteRiskActionStep handles DELETE /action-plans/{planId}/steps/{stepId}.
 func (h *RiskActionStepHandler) DeleteRiskActionStep(w http.ResponseWriter, r *http.Request) {
 	planID, err := strconv.Atoi(r.PathValue("planId"))
-	if err != nil {
+	if err != nil || planID <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "planId must be a positive integer"})
 		return
 	}
 	stepID, err := strconv.Atoi(r.PathValue("stepId"))
-	if err != nil {
+	if err != nil || stepID <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "stepId must be a positive integer"})
 		return
 	}

@@ -70,7 +70,7 @@ func (r *userRepo) SearchUsers(ctx context.Context, req domain.SearchUsersReques
 	}
 	defer rows.Close()
 
-	var users []domain.User
+	users := []domain.User{}
 	for rows.Next() {
 		u, err := scanUser(rows)
 		if err != nil {

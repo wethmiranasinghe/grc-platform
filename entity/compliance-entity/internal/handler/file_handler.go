@@ -21,11 +21,18 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/apierror"
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/storage"
 )
+
+// validBlobPath enforces the allowed Azure Blob layout so callers cannot
+// address arbitrary paths outside the audits/{id}/controls/{id}/evidence/ tree.
+var validBlobPath = regexp.MustCompile(`^audits/\d+/controls/\d+/evidence/`)
+
+func guardBlobPath(path string) bool { return validBlobPath.MatchString(path) }
 
 // maxFileUploadBytes caps a single proxied file upload; the GRC Backend already
 // validates size/type before forwarding, this is a defensive backstop.
@@ -52,6 +59,10 @@ func (h *FileHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	blobName := strings.TrimSpace(r.FormValue("blobName"))
 	if blobName == "" {
 		apierror.WriteJSON(w, http.StatusBadRequest, "blobName is required")
+		return
+	}
+	if !guardBlobPath(blobName) {
+		apierror.WriteJSON(w, http.StatusBadRequest, "blobName must be within the audits/{id}/controls/{id}/evidence/ path")
 		return
 	}
 	f, header, err := r.FormFile("file")
@@ -88,6 +99,10 @@ func (h *FileHandler) DownloadFile(w http.ResponseWriter, r *http.Request) {
 		apierror.WriteJSON(w, http.StatusBadRequest, "path is required")
 		return
 	}
+	if !guardBlobPath(blobName) {
+		apierror.WriteJSON(w, http.StatusBadRequest, "path must be within the audits/{id}/controls/{id}/evidence/ path")
+		return
+	}
 	data, contentType, err := h.storage.ReadBlob(r.Context(), blobName)
 	if err != nil {
 		writeServiceError(w, r, err)
@@ -108,6 +123,10 @@ func (h *FileHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 	prefix := r.URL.Query().Get("prefix")
 	if prefix == "" {
 		apierror.WriteJSON(w, http.StatusBadRequest, "prefix is required")
+		return
+	}
+	if !guardBlobPath(prefix) {
+		apierror.WriteJSON(w, http.StatusBadRequest, "prefix must be within the audits/{id}/controls/{id}/evidence/ path")
 		return
 	}
 	items, err := h.storage.ListBlobs(r.Context(), prefix)
@@ -134,6 +153,10 @@ func (h *FileHandler) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	blobName := r.URL.Query().Get("path")
 	if blobName == "" {
 		apierror.WriteJSON(w, http.StatusBadRequest, "path is required")
+		return
+	}
+	if !guardBlobPath(blobName) {
+		apierror.WriteJSON(w, http.StatusBadRequest, "path must be within the audits/{id}/controls/{id}/evidence/ path")
 		return
 	}
 	if err := h.storage.Delete(r.Context(), blobName); err != nil {

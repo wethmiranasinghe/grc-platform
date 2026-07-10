@@ -40,6 +40,7 @@ func (s *auditProductService) SearchAuditProducts(ctx context.Context, req domai
 	if req.StatusKey != "" && !validAuditProductStatuses[strings.ToUpper(req.StatusKey)] {
 		return domain.SearchAuditProductsResponse{}, &apierror.ValidationError{Msg: "invalid statusKey: must be ACTIVE or INACTIVE"}
 	}
+	req.StatusKey = strings.ToUpper(req.StatusKey)
 	normalizePagination(&req.Pagination)
 	products, total, err := s.repo.SearchAuditProducts(ctx, req)
 	if err != nil {
@@ -66,6 +67,10 @@ func (s *auditProductService) CreateAuditProduct(ctx context.Context, req domain
 	if req.Name == "" {
 		return domain.AuditProduct{}, &apierror.ValidationError{Msg: "name is required"}
 	}
+	if req.Status != "" && !validAuditProductStatuses[strings.ToUpper(req.Status)] {
+		return domain.AuditProduct{}, &apierror.ValidationError{Msg: "invalid status: must be ACTIVE or INACTIVE"}
+	}
+	req.Status = strings.ToUpper(req.Status)
 	if req.CreatedBy == "" {
 		return domain.AuditProduct{}, &apierror.ValidationError{Msg: "createdBy is required"}
 	}
@@ -79,6 +84,13 @@ func (s *auditProductService) CreateAuditProduct(ctx context.Context, req domain
 func (s *auditProductService) UpdateAuditProduct(ctx context.Context, id int, req domain.UpdateAuditProductRequest) (domain.AuditProduct, error) {
 	if id <= 0 {
 		return domain.AuditProduct{}, &apierror.ValidationError{Msg: "product id must be a positive integer"}
+	}
+	if req.Status != nil && !validAuditProductStatuses[strings.ToUpper(*req.Status)] {
+		return domain.AuditProduct{}, &apierror.ValidationError{Msg: "invalid status: must be ACTIVE or INACTIVE"}
+	}
+	if req.Status != nil {
+		up := strings.ToUpper(*req.Status)
+		req.Status = &up
 	}
 	if req.UpdatedBy == "" {
 		return domain.AuditProduct{}, &apierror.ValidationError{Msg: "updatedBy is required"}

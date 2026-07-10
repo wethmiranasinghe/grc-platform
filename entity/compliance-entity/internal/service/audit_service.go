@@ -37,10 +37,11 @@ var validAuditStatuses = map[string]bool{
 }
 
 func (s *auditService) SearchAudits(ctx context.Context, req domain.SearchAuditsRequest) (domain.SearchAuditsResponse, error) {
-	for _, sk := range req.StatusKeys {
+	for i, sk := range req.StatusKeys {
 		if !validAuditStatuses[strings.ToUpper(sk)] {
 			return domain.SearchAuditsResponse{}, &apierror.ValidationError{Msg: "invalid statusKey: " + sk}
 		}
+		req.StatusKeys[i] = strings.ToUpper(sk)
 	}
 	normalizePagination(&req.Pagination)
 	audits, total, err := s.repo.SearchAudits(ctx, req)
@@ -109,6 +110,10 @@ func (s *auditService) UpdateAudit(ctx context.Context, id int, req domain.Updat
 	}
 	if req.Status != nil && !validAuditStatuses[strings.ToUpper(*req.Status)] {
 		return domain.Audit{}, &apierror.ValidationError{Msg: "invalid status: " + *req.Status}
+	}
+	if req.Status != nil {
+		up := strings.ToUpper(*req.Status)
+		req.Status = &up
 	}
 	a, err := s.repo.UpdateAudit(ctx, id, req)
 	if err != nil {

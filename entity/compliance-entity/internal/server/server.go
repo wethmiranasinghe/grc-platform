@@ -26,9 +26,10 @@ import (
 )
 
 const (
-	serverReadTimeout  = 60 * time.Second // allow file upload/download bodies
-	serverWriteTimeout = 60 * time.Second
-	serverIdleTimeout  = 60 * time.Second
+	serverReadHeaderTimeout = 10 * time.Second // Slowloris protection: headers must arrive within 10 s
+	serverReadTimeout       = 60 * time.Second // allow file upload/download bodies
+	serverWriteTimeout      = 60 * time.Second
+	serverIdleTimeout       = 60 * time.Second
 )
 
 // New creates an http.Server with production-safe timeouts and the full
@@ -36,10 +37,11 @@ const (
 // not configured (local dev); the file (byte-storage) routes are then skipped.
 func New(addr string, db *sql.DB, store *storage.Service) *http.Server {
 	return &http.Server{
-		Addr:         addr,
-		Handler:      NewRouter(db, store),
-		ReadTimeout:  serverReadTimeout,
-		WriteTimeout: serverWriteTimeout,
-		IdleTimeout:  serverIdleTimeout,
+		Addr:              addr,
+		Handler:           NewRouter(db, store),
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		ReadTimeout:       serverReadTimeout,
+		WriteTimeout:      serverWriteTimeout,
+		IdleTimeout:       serverIdleTimeout,
 	}
 }

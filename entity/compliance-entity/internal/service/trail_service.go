@@ -57,7 +57,8 @@ func (s *trailService) CreateTrail(ctx context.Context, auditID int, req domain.
 	if auditID <= 0 {
 		return domain.AuditTrail{}, &apierror.ValidationError{Msg: "auditId must be a positive integer"}
 	}
-	if !validTrailActions[strings.ToUpper(req.Action)] {
+	req.Action = strings.ToUpper(req.Action)
+	if !validTrailActions[req.Action] {
 		return domain.AuditTrail{}, &apierror.ValidationError{Msg: "invalid action: " + req.Action}
 	}
 	if err := validJSONField("details", req.Details); err != nil {

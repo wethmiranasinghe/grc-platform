@@ -54,6 +54,9 @@ func (s *populationService) CreatePopulation(ctx context.Context, auditID, contr
 	if controlID <= 0 {
 		return domain.AuditPopulation{}, &apierror.ValidationError{Msg: "controlId must be a positive integer"}
 	}
+	if req.DueDate == nil || *req.DueDate == "" {
+		return domain.AuditPopulation{}, &apierror.ValidationError{Msg: "dueDate is required"}
+	}
 	if req.CreatedBy == "" {
 		return domain.AuditPopulation{}, &apierror.ValidationError{Msg: "createdBy is required"}
 	}

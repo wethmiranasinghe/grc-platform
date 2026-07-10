@@ -51,7 +51,10 @@ func (r *trailRepo) CreateTrail(ctx context.Context, auditID int, req domain.Cre
 	if err != nil {
 		return nil, fmt.Errorf("audit_trail.Create: %w", err)
 	}
-	id, _ := res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("audit_trail.Create last insert id: %w", err)
+	}
 	return r.getTrailByID(ctx, id)
 }
 

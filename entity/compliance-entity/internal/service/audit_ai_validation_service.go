@@ -43,7 +43,8 @@ func (s *aiValidationService) CreateValidation(ctx context.Context, evidenceID i
 	if req.ControlID <= 0 {
 		return domain.AuditAIValidationLog{}, &apierror.ValidationError{Msg: "controlId must be a positive integer"}
 	}
-	if !validAIResults[strings.ToUpper(req.Result)] {
+	req.Result = strings.ToUpper(req.Result)
+	if !validAIResults[req.Result] {
 		return domain.AuditAIValidationLog{}, &apierror.ValidationError{Msg: "invalid result: " + req.Result + " (must be PASS, FAIL, or UNCERTAIN)"}
 	}
 	if req.CreatedBy == "" {

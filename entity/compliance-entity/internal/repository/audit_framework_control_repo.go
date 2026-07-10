@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/apierror"
@@ -72,7 +73,7 @@ func (r *frameworkControlRepo) GetByID(ctx context.Context, id int) (*domain.Aud
 	row := r.db.QueryRowContext(ctx,
 		"SELECT "+fwCtlCols+" FROM audit_framework_control WHERE id = ?", id)
 	c, err := scanFWControl(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("framework control %d not found", id)}
 	}
 	if err != nil {

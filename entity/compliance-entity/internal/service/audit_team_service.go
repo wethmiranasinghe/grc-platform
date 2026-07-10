@@ -40,6 +40,7 @@ func (s *auditTeamService) SearchAuditTeams(ctx context.Context, req domain.Sear
 	if req.StatusKey != "" && !validAuditTeamStatuses[strings.ToUpper(req.StatusKey)] {
 		return domain.SearchAuditTeamsResponse{}, &apierror.ValidationError{Msg: "invalid statusKey: must be ACTIVE or INACTIVE"}
 	}
+	req.StatusKey = strings.ToUpper(req.StatusKey)
 	normalizePagination(&req.Pagination)
 	teams, total, err := s.repo.SearchAuditTeams(ctx, req)
 	if err != nil {
@@ -66,6 +67,10 @@ func (s *auditTeamService) CreateAuditTeam(ctx context.Context, req domain.Creat
 	if req.Name == "" {
 		return domain.AuditTeam{}, &apierror.ValidationError{Msg: "name is required"}
 	}
+	if req.Status != "" && !validAuditTeamStatuses[strings.ToUpper(req.Status)] {
+		return domain.AuditTeam{}, &apierror.ValidationError{Msg: "invalid status: must be ACTIVE or INACTIVE"}
+	}
+	req.Status = strings.ToUpper(req.Status)
 	if req.CreatedBy == "" {
 		return domain.AuditTeam{}, &apierror.ValidationError{Msg: "createdBy is required"}
 	}
@@ -79,6 +84,13 @@ func (s *auditTeamService) CreateAuditTeam(ctx context.Context, req domain.Creat
 func (s *auditTeamService) UpdateAuditTeam(ctx context.Context, id int, req domain.UpdateAuditTeamRequest) (domain.AuditTeam, error) {
 	if id <= 0 {
 		return domain.AuditTeam{}, &apierror.ValidationError{Msg: "team id must be a positive integer"}
+	}
+	if req.Status != nil && !validAuditTeamStatuses[strings.ToUpper(*req.Status)] {
+		return domain.AuditTeam{}, &apierror.ValidationError{Msg: "invalid status: must be ACTIVE or INACTIVE"}
+	}
+	if req.Status != nil {
+		up := strings.ToUpper(*req.Status)
+		req.Status = &up
 	}
 	if req.UpdatedBy == "" {
 		return domain.AuditTeam{}, &apierror.ValidationError{Msg: "updatedBy is required"}

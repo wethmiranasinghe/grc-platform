@@ -273,6 +273,9 @@ func (s *controlService) UpdateControl(ctx context.Context, auditID, controlID i
 				Msg: fmt.Sprintf("invalid status transition: %s -> %s", current.Status, *req.Status),
 			}
 		}
+		// Pass current status to the repo so the UPDATE enforces it atomically,
+		// preventing TOCTOU races between the read above and the write below.
+		req.ExpectedStatus = current.Status
 	}
 	c, err := s.repo.UpdateControl(ctx, auditID, controlID, req)
 	if err != nil {

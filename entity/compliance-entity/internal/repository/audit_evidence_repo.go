@@ -138,11 +138,27 @@ func (r *evidenceRepo) ListEvidenceByControl(ctx context.Context, auditID, contr
 
 func (r *evidenceRepo) UpdateEvidence(ctx context.Context, evidenceID int, req domain.UpdateEvidenceRequest) (*domain.AuditEvidence, error) {
 	sets := []string{"status = ?", "updated_by = ?"}
-	args := []any{req.Status, req.UpdatedBy, evidenceID}
 
-	if _, err := r.db.ExecContext(ctx,
-		"UPDATE audit_evidence SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...); err != nil { // #nosec G202
+	var (
+		query  string
+		args   []any
+		result sql.Result
+		err    error
+	)
+	if req.ExpectedStatus != "" {
+		args = []any{req.Status, req.UpdatedBy, evidenceID, req.ExpectedStatus}
+		query = "UPDATE audit_evidence SET " + strings.Join(sets, ", ") + " WHERE id = ? AND status = ?" // #nosec G202
+	} else {
+		args = []any{req.Status, req.UpdatedBy, evidenceID}
+		query = "UPDATE audit_evidence SET " + strings.Join(sets, ", ") + " WHERE id = ?" // #nosec G202
+	}
+	if result, err = r.db.ExecContext(ctx, query, args...); err != nil {
 		return nil, fmt.Errorf("evidence.Update(%d): %w", evidenceID, err)
+	}
+	if req.ExpectedStatus != "" {
+		if n, _ := result.RowsAffected(); n == 0 {
+			return nil, &apierror.ConflictError{Msg: "evidence was modified concurrently, please retry"}
+		}
 	}
 	return r.GetEvidenceByID(ctx, evidenceID)
 }
@@ -185,6 +201,9 @@ func (r *evidenceRepo) getEvidenceFileByID(ctx context.Context, fileID int) (*do
 	err := r.db.QueryRowContext(ctx,
 		"SELECT id, evidence_id, population_id, file_kind, uploaded_by, file_name, file_path, file_type, file_size, created_at FROM audit_evidence_file WHERE id = ?",
 		fileID).Scan(&f.ID, &evidenceID, &populationID, &fileKind, &uploadedBy, &f.FileName, &f.FilePath, &fileType, &fileSize, &f.CreatedOn)
+	if err == sql.ErrNoRows {
+		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("evidence file %d not found", fileID)}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("evidence_file.GetByID(%d): %w", fileID, err)
 	}

@@ -38,7 +38,7 @@ func NewDashboardRepository(db *sql.DB) DashboardRepository { return &dashboardR
 // audit_control rows to those the user may see, plus any args to bind.
 func (r *dashboardRepo) resolveScope(ctx context.Context, req domain.AuditDashboardRequest) (string, []any) {
 	switch req.PrimaryRole() {
-	case domain.RoleComplianceAdmin, domain.RoleComplianceTeam, domain.RoleManagement, "":
+	case domain.RoleComplianceAdmin, domain.RoleComplianceTeam, domain.RoleManagement:
 		return "", nil
 	case domain.RoleInternalTeam:
 		var teamID sql.NullInt64
@@ -55,7 +55,7 @@ func (r *dashboardRepo) resolveScope(ctx context.Context, req domain.AuditDashbo
 		}
 		return ` AND c.auditor_id = ?`, []any{userID.Int64}
 	default:
-		return "", nil
+		return " AND 1=0", nil
 	}
 }
 

@@ -135,6 +135,9 @@ func (s *evidenceService) UpdateEvidence(ctx context.Context, evidenceID int, re
 			Msg: fmt.Sprintf("invalid status transition: %s -> %s", current.Status, req.Status),
 		}
 	}
+	// Pass current status to the repo so the UPDATE enforces it atomically,
+	// preventing TOCTOU races between the read above and the write below.
+	req.ExpectedStatus = current.Status
 	e, err := s.repo.UpdateEvidence(ctx, evidenceID, req)
 	if err != nil {
 		return domain.AuditEvidence{}, err

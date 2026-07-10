@@ -84,9 +84,7 @@ func (h *FrameworkControlHandler) CreateControl(w http.ResponseWriter, r *http.R
 	if !decodeRequest(w, r, &req) {
 		return
 	}
-	if req.CreatedBy == "" {
-		req.CreatedBy = middleware.UserIDTokenFromContext(r.Context())
-	}
+	req.CreatedBy = middleware.UserIDTokenFromContext(r.Context())
 	c, err := h.svc.Create(r.Context(), frameworkID, req)
 	if err != nil {
 		writeServiceError(w, r, err)
@@ -109,9 +107,7 @@ func (h *FrameworkControlHandler) NewVersion(w http.ResponseWriter, r *http.Requ
 	if !decodeRequest(w, r, &req) {
 		return
 	}
-	if req.UpdatedBy == "" {
-		req.UpdatedBy = middleware.UserIDTokenFromContext(r.Context())
-	}
+	req.UpdatedBy = middleware.UserIDTokenFromContext(r.Context())
 	c, err := h.svc.NewVersion(r.Context(), controlID, req)
 	if err != nil {
 		writeServiceError(w, r, err)

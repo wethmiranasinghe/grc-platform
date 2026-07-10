@@ -43,6 +43,11 @@ type ServiceUnavailableError struct{ Msg string }
 
 func (e *ServiceUnavailableError) Error() string { return e.Msg }
 
+// ConflictError signals a concurrent modification prevented the operation (HTTP 409).
+type ConflictError struct{ Msg string }
+
+func (e *ConflictError) Error() string { return e.Msg }
+
 // WriteJSON writes an ErrorResponse JSON body with the given HTTP status code.
 func WriteJSON(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")

@@ -40,6 +40,7 @@ func (s *auditFrameworkService) SearchAuditFrameworks(ctx context.Context, req d
 	if req.StatusKey != "" && !validAuditFrameworkStatuses[strings.ToUpper(req.StatusKey)] {
 		return domain.SearchAuditFrameworksResponse{}, &apierror.ValidationError{Msg: "invalid statusKey: must be ACTIVE or INACTIVE"}
 	}
+	req.StatusKey = strings.ToUpper(req.StatusKey)
 	normalizePagination(&req.Pagination)
 	frameworks, total, err := s.repo.SearchAuditFrameworks(ctx, req)
 	if err != nil {
@@ -66,6 +67,10 @@ func (s *auditFrameworkService) CreateAuditFramework(ctx context.Context, req do
 	if req.Name == "" {
 		return domain.AuditFramework{}, &apierror.ValidationError{Msg: "name is required"}
 	}
+	if req.Status != "" && !validAuditFrameworkStatuses[strings.ToUpper(req.Status)] {
+		return domain.AuditFramework{}, &apierror.ValidationError{Msg: "invalid status: must be ACTIVE or INACTIVE"}
+	}
+	req.Status = strings.ToUpper(req.Status)
 	if req.CreatedBy == "" {
 		return domain.AuditFramework{}, &apierror.ValidationError{Msg: "createdBy is required"}
 	}
@@ -79,6 +84,13 @@ func (s *auditFrameworkService) CreateAuditFramework(ctx context.Context, req do
 func (s *auditFrameworkService) UpdateAuditFramework(ctx context.Context, id int, req domain.UpdateAuditFrameworkRequest) (domain.AuditFramework, error) {
 	if id <= 0 {
 		return domain.AuditFramework{}, &apierror.ValidationError{Msg: "framework id must be a positive integer"}
+	}
+	if req.Status != nil && !validAuditFrameworkStatuses[strings.ToUpper(*req.Status)] {
+		return domain.AuditFramework{}, &apierror.ValidationError{Msg: "invalid status: must be ACTIVE or INACTIVE"}
+	}
+	if req.Status != nil {
+		up := strings.ToUpper(*req.Status)
+		req.Status = &up
 	}
 	if req.UpdatedBy == "" {
 		return domain.AuditFramework{}, &apierror.ValidationError{Msg: "updatedBy is required"}

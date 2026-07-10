@@ -42,7 +42,14 @@ type populationRepo struct{ db *sql.DB }
 // NewPopulationRepository constructs a PopulationRepository.
 func NewPopulationRepository(db *sql.DB) PopulationRepository { return &populationRepo{db: db} }
 
-func (r *populationRepo) CreatePopulation(ctx context.Context, _, controlID int, req domain.CreatePopulationRequest) (*domain.AuditPopulation, error) {
+func (r *populationRepo) CreatePopulation(ctx context.Context, auditID, controlID int, req domain.CreatePopulationRequest) (*domain.AuditPopulation, error) {
+	var exists int
+	if err := r.db.QueryRowContext(ctx,
+		"SELECT 1 FROM audit_control WHERE id = ? AND audit_id = ?", controlID, auditID).Scan(&exists); err == sql.ErrNoRows {
+		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("control %d not found in audit %d", controlID, auditID)}
+	} else if err != nil {
+		return nil, fmt.Errorf("population.Create parent check: %w", err)
+	}
 	res, err := r.db.ExecContext(ctx,
 		`INSERT INTO audit_population
 		 (control_id, owner_id, team_id, reference_number, description, due_date, status, created_by, updated_by)
@@ -73,12 +80,14 @@ func (r *populationRepo) GetPopulationByID(ctx context.Context, populationID int
 	return pop, nil
 }
 
-func (r *populationRepo) ListPopulations(ctx context.Context, _, controlID int) ([]domain.AuditPopulation, error) {
+func (r *populationRepo) ListPopulations(ctx context.Context, auditID, controlID int) ([]domain.AuditPopulation, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, control_id, owner_id, team_id, reference_number, description,
-		        status, DATE_FORMAT(due_date,'%Y-%m-%d'), comments, created_at, updated_at
-		 FROM audit_population WHERE control_id = ? ORDER BY id`,
-		controlID)
+		`SELECT p.id, p.control_id, p.owner_id, p.team_id, p.reference_number, p.description,
+		        p.status, DATE_FORMAT(p.due_date,'%Y-%m-%d'), p.comments, p.created_at, p.updated_at
+		 FROM audit_population p
+		 JOIN audit_control c ON c.id = p.control_id
+		 WHERE p.control_id = ? AND c.audit_id = ? ORDER BY p.id`,
+		controlID, auditID)
 	if err != nil {
 		return nil, fmt.Errorf("population.List: %w", err)
 	}

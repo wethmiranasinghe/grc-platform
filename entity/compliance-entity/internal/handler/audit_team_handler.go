@@ -52,7 +52,7 @@ func (h *AuditTeamHandler) SearchAuditTeams(w http.ResponseWriter, r *http.Reque
 // GetAuditTeamByID handles GET /audit/teams/{id}.
 func (h *AuditTeamHandler) GetAuditTeamByID(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil {
+	if err != nil || id <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "id must be a positive integer"})
 		return
 	}
@@ -84,7 +84,7 @@ func (h *AuditTeamHandler) CreateAuditTeam(w http.ResponseWriter, r *http.Reques
 // UpdateAuditTeam handles PATCH /audit/teams/{id}.
 func (h *AuditTeamHandler) UpdateAuditTeam(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil {
+	if err != nil || id <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "id must be a positive integer"})
 		return
 	}

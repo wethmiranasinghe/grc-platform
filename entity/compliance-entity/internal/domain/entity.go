@@ -587,6 +587,7 @@ type UpdateControlRequest struct {
 	Comments        *string `json:"comments"`
 	SampleReference *string `json:"sampleReference"`
 	UpdatedBy       string  `json:"updatedBy"`
+	ExpectedStatus  string  `json:"-"` // set server-side for atomic transition; never decoded from JSON
 }
 
 // =============================================================================
@@ -614,8 +615,9 @@ type CreateEvidenceRequest struct {
 }
 
 type UpdateEvidenceRequest struct {
-	Status    string `json:"status"` // SUBMITTED | COMPLIANCE_APPROVED | COMPLIANCE_REJECTED | APPROVED | AUDITOR_REJECTED
-	UpdatedBy string `json:"updatedBy"`
+	Status         string `json:"status"` // SUBMITTED | COMPLIANCE_APPROVED | COMPLIANCE_REJECTED | APPROVED | AUDITOR_REJECTED
+	UpdatedBy      string `json:"updatedBy"`
+	ExpectedStatus string `json:"-"` // set server-side for atomic transition; never decoded from JSON
 }
 
 // AuditEvidenceFile is one uploaded file attached to an evidence submission or population.

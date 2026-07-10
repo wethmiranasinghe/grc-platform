@@ -276,7 +276,14 @@ func (r *controlRepo) CreateControl(ctx context.Context, auditID int, req domain
 		initialStatus = "POPULATION_PENDING"
 	}
 	defCols := controlDefinitionCols(req)
-	res, err := r.db.ExecContext(ctx,
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("control.Create begin: %w", err)
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx,
 		`INSERT INTO audit_control
 		 (audit_id, framework_control_id,
 		  control_number, description, evidence_requirement, requirement_type, control_type, scope,
@@ -298,7 +305,7 @@ func (r *controlRepo) CreateControl(ctx context.Context, auditID int, req domain
 	if req.Population != nil && strings.EqualFold(req.RequirementType, "OE") {
 		p := req.Population
 		desc := nullableString(&p.Description)
-		if _, err := r.db.ExecContext(ctx,
+		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO audit_population
 			 (control_id, owner_id, team_id, reference_number, description, due_date, status, created_by, updated_by)
 			 VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)`,
@@ -307,6 +314,9 @@ func (r *controlRepo) CreateControl(ctx context.Context, auditID int, req domain
 			req.CreatedBy, req.CreatedBy); err != nil {
 			return nil, fmt.Errorf("control.Create population: %w", err)
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("control.Create commit: %w", err)
 	}
 	return r.GetControlByID(ctx, auditID, int(id))
 }
@@ -424,11 +434,24 @@ func (r *controlRepo) UpdateControl(ctx context.Context, auditID, controlID int,
 	}
 	sets = append(sets, "updated_by = ?")
 	args = append(args, req.UpdatedBy)
-	args = append(args, auditID, controlID)
 
-	if _, err := r.db.ExecContext(ctx,
-		"UPDATE audit_control SET "+strings.Join(sets, ", ")+" WHERE audit_id = ? AND id = ?", args...); err != nil { // #nosec G202
+	var query string
+	if req.ExpectedStatus != "" {
+		args = append(args, auditID, controlID, req.ExpectedStatus)
+		query = "UPDATE audit_control SET " + strings.Join(sets, ", ") + " WHERE audit_id = ? AND id = ? AND status = ?" // #nosec G202
+	} else {
+		args = append(args, auditID, controlID)
+		query = "UPDATE audit_control SET " + strings.Join(sets, ", ") + " WHERE audit_id = ? AND id = ?" // #nosec G202
+	}
+
+	result, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
 		return nil, fmt.Errorf("control.Update(%d,%d): %w", auditID, controlID, err)
+	}
+	if req.ExpectedStatus != "" {
+		if n, _ := result.RowsAffected(); n == 0 {
+			return nil, &apierror.ConflictError{Msg: "control was modified concurrently, please retry"}
+		}
 	}
 	return r.GetControlByID(ctx, auditID, controlID)
 }

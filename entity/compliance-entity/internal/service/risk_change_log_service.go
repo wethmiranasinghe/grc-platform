@@ -43,7 +43,8 @@ func (s *riskChangeLogService) CreateRiskChangeLog(ctx context.Context, riskID i
 	if req.CreatedBy == "" {
 		return domain.RiskChangeLog{}, &apierror.ValidationError{Msg: "createdBy is required"}
 	}
-	if !validChangeLogActions[strings.ToUpper(req.Action)] {
+	req.Action = strings.ToUpper(req.Action)
+	if !validChangeLogActions[req.Action] {
 		return domain.RiskChangeLog{}, &apierror.ValidationError{Msg: "invalid action: " + req.Action}
 	}
 	if err := validJSONField("oldValue", req.OldValue); err != nil {

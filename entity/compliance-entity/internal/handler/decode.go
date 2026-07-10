@@ -77,6 +77,7 @@ func writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 		ve  *apierror.ValidationError
 		nfe *apierror.NotFoundError
 		sue *apierror.ServiceUnavailableError
+		ce  *apierror.ConflictError
 	)
 	switch {
 	case errors.As(err, &ve):
@@ -85,6 +86,9 @@ func writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.As(err, &nfe):
 		log.Printf("Not found: %s %s: %s", r.Method, r.URL.Path, nfe.Msg) // #nosec G706
 		apierror.WriteJSON(w, http.StatusNotFound, nfe.Msg)
+	case errors.As(err, &ce):
+		log.Printf("Conflict: %s %s: %s", r.Method, r.URL.Path, ce.Msg) // #nosec G706
+		apierror.WriteJSON(w, http.StatusConflict, ce.Msg)
 	case errors.As(err, &sue):
 		log.Printf("Service unavailable: %s %s: %s", r.Method, r.URL.Path, sue.Msg) // #nosec G706
 		apierror.WriteJSON(w, http.StatusServiceUnavailable, "service temporarily unavailable, please try again later")

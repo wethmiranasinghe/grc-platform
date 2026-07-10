@@ -37,7 +37,7 @@ func NewRiskActionPlanHandler(svc service.RiskActionPlanService) *RiskActionPlan
 // CreateRiskActionPlan handles POST /risks/{riskId}/action-plans.
 func (h *RiskActionPlanHandler) CreateRiskActionPlan(w http.ResponseWriter, r *http.Request) {
 	riskID, err := strconv.Atoi(r.PathValue("riskId"))
-	if err != nil {
+	if err != nil || riskID <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "riskId must be a positive integer"})
 		return
 	}
@@ -58,7 +58,7 @@ func (h *RiskActionPlanHandler) CreateRiskActionPlan(w http.ResponseWriter, r *h
 // ListRiskActionPlans handles GET /risks/{riskId}/action-plans.
 func (h *RiskActionPlanHandler) ListRiskActionPlans(w http.ResponseWriter, r *http.Request) {
 	riskID, err := strconv.Atoi(r.PathValue("riskId"))
-	if err != nil {
+	if err != nil || riskID <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "riskId must be a positive integer"})
 		return
 	}
@@ -74,7 +74,7 @@ func (h *RiskActionPlanHandler) ListRiskActionPlans(w http.ResponseWriter, r *ht
 // GetRiskActionPlanByID handles GET /risks/action-plans/{planId}.
 func (h *RiskActionPlanHandler) GetRiskActionPlanByID(w http.ResponseWriter, r *http.Request) {
 	planID, err := strconv.Atoi(r.PathValue("planId"))
-	if err != nil {
+	if err != nil || planID <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "planId must be a positive integer"})
 		return
 	}
@@ -90,7 +90,7 @@ func (h *RiskActionPlanHandler) GetRiskActionPlanByID(w http.ResponseWriter, r *
 // UpdateRiskActionPlan handles PATCH /risks/action-plans/{planId}.
 func (h *RiskActionPlanHandler) UpdateRiskActionPlan(w http.ResponseWriter, r *http.Request) {
 	planID, err := strconv.Atoi(r.PathValue("planId"))
-	if err != nil {
+	if err != nil || planID <= 0 {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "planId must be a positive integer"})
 		return
 	}
