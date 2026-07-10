@@ -450,6 +450,13 @@ func (r *controlRepo) UpdateControl(ctx context.Context, auditID, controlID int,
 	}
 	if req.ExpectedStatus != "" {
 		if n, _ := result.RowsAffected(); n == 0 {
+			current, err := r.GetControlByID(ctx, auditID, controlID)
+			if err != nil {
+				return nil, err // propagates NotFoundError if record was deleted
+			}
+			if current.Status == req.ExpectedStatus {
+				return current, nil // MySQL no-op: value unchanged, not a conflict
+			}
 			return nil, &apierror.ConflictError{Msg: "control was modified concurrently, please retry"}
 		}
 	}

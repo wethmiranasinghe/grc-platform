@@ -157,6 +157,13 @@ func (r *evidenceRepo) UpdateEvidence(ctx context.Context, evidenceID int, req d
 	}
 	if req.ExpectedStatus != "" {
 		if n, _ := result.RowsAffected(); n == 0 {
+			current, err := r.GetEvidenceByID(ctx, evidenceID)
+			if err != nil {
+				return nil, err // propagates NotFoundError if record was deleted
+			}
+			if current.Status == req.ExpectedStatus {
+				return current, nil // MySQL no-op: value unchanged, not a conflict
+			}
 			return nil, &apierror.ConflictError{Msg: "evidence was modified concurrently, please retry"}
 		}
 	}
