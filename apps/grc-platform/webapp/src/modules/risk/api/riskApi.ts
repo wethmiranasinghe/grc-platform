@@ -296,6 +296,71 @@ export interface DashboardSummary {
   high_risks: HighRiskItem[];
 }
 
+// ── Analytics types (mirror model/analytics.go) ────────────────────────────────
+
+export interface AnalyticsKPIs {
+  new_risks_this_month: number;
+  avg_days_to_close: number | null;
+  avg_effective_score: number | null;
+}
+
+export interface TrendPoint {
+  month: string;
+  identified_count: number;
+  closed_count: number;
+  avg_score: number | null;
+}
+
+export interface MonthLevelCount {
+  month: string;
+  risk_level: string;
+  color_code: string;
+  count: number;
+}
+
+export interface RegisterShare {
+  register_name: string;
+  count: number;
+}
+
+export interface ComplianceShare {
+  compliance_name: string;
+  count: number;
+}
+
+export interface TreatmentShare {
+  treatment_strategy: string;
+  count: number;
+}
+
+export interface WorkflowStageCount {
+  workflow_status: string;
+  count: number;
+}
+
+export interface AgingRiskItem {
+  id: number;
+  risk_code: string;
+  risk_title: string;
+  register_name: string;
+  owner_name: string;
+  risk_level: string;
+  color_code: string;
+  identified_date: string | null;
+  age_days: number;
+}
+
+export interface AnalyticsSummary {
+  kpis: AnalyticsKPIs;
+  trend: TrendPoint[];
+  level_distribution: MonthLevelCount[];
+  register_shares: RegisterShare[] | null;
+  compliance_distribution: ComplianceShare[];
+  treatment_mix: TreatmentShare[];
+  workflow_funnel: WorkflowStageCount[];
+  aging_risks: AgingRiskItem[];
+}
+
 // ── API functions ──────────────────────────────────────────────────────────────
 
 type AuthFetch = (input: RequestInfo | URL, options?: RequestInit) => Promise<Response>;
@@ -487,6 +552,15 @@ export async function resubmitRisk(authFetch: AuthFetch, id: number): Promise<vo
 export async function fetchDashboard(authFetch: AuthFetch): Promise<DashboardSummary> {
   const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/risks/dashboard`);
   return handleResponse<DashboardSummary>(res);
+}
+
+export async function fetchAnalytics(
+  authFetch: AuthFetch,
+  registerId?: number,
+): Promise<AnalyticsSummary> {
+  const qs = registerId ? `?register_id=${registerId}` : "";
+  const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/analytics/summary${qs}`);
+  return handleResponse<AnalyticsSummary>(res);
 }
 
 export async function createAssessment(
