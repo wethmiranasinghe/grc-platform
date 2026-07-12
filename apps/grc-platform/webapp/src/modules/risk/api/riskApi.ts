@@ -405,6 +405,17 @@ export async function fetchUsers(authFetch: AuthFetch): Promise<UserOption[]> {
   return handleResponse<UserOption[]>(res);
 }
 
+<<<<<<< Updated upstream
+=======
+// searchEmployees looks up active employees by email substring, live
+// from the HR entity service (never the GRC platform's own database), for
+export async function searchEmployees(authFetch: AuthFetch, query: string): Promise<EmployeeOption[]> {
+  const params = new URLSearchParams({ q: query });
+  const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/employees/search?${params}`);
+  return handleResponse<EmployeeOption[]>(res);
+}
+
+>>>>>>> Stashed changes
 export async function fetchNextSequenceID(
   authFetch: AuthFetch,
   sourceRegisterID: number,

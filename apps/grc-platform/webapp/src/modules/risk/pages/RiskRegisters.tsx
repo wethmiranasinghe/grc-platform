@@ -31,8 +31,6 @@ import {
   InputAdornment,
   InputLabel,
   MenuItem,
-  PageContent,
-  PageTitle,
   Paper,
   Select,
   Stack,
@@ -509,10 +507,10 @@ export default function RiskRegisters(): JSX.Element {
   const colSpan = 8 + (showStatusCol ? 1 : 0) + (showRiskTypeCol ? 1 : 0);
 
   return (
-    <PageContent>
-      <PageTitle>
-        <PageTitle.Header>Risk Registers</PageTitle.Header>
-      </PageTitle>
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
+      <Typography variant="h4" fontWeight={700} sx={{ mb: 3 }}>
+        Risk Registers
+      </Typography>
 
       <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
         <Tabs value={activeTab} onChange={handleTabChange}>
@@ -738,6 +736,6 @@ export default function RiskRegisters(): JSX.Element {
           </Button>
         </DialogActions>
       </Dialog>
-    </PageContent>
+    </Box>
   );
 }

@@ -23,8 +23,6 @@ import {
   Box,
   Button,
   Divider,
-  PageContent,
-  PageTitle,
   Paper,
   Stack,
   Step,
@@ -157,7 +155,7 @@ export default function AddRisk(): JSX.Element {
     mode: "onSubmit",
   });
 
-  const { trigger, getValues, handleSubmit, setError } = methods;
+  const { trigger, handleSubmit, setError } = methods;
 
   // Watch the three fields that determine the risk code preview and next-sequence-id.
   const watchedYear            = methods.watch("year");
@@ -312,13 +310,13 @@ export default function AddRisk(): JSX.Element {
   ];
 
   return (
-    <PageContent>
-      <PageTitle sx={{ mb: 3 }}>
-        <PageTitle.Header>Add a Risk</PageTitle.Header>
-        <PageTitle.SubHeader>
-          Complete all three steps to register a new risk in the system.
-        </PageTitle.SubHeader>
-      </PageTitle>
+    <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 1500, mx: "auto" }}>
+      <Typography variant="h4" fontWeight={700} sx={{ mb: 0.5 }}>
+        Add a Risk
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Complete all three steps to register a new risk in the system.
+      </Typography>
 
       <FormProvider {...methods}>
         <Paper
@@ -402,6 +400,6 @@ export default function AddRisk(): JSX.Element {
           )}
         </Paper>
       </FormProvider>
-    </PageContent>
+    </Box>
   );
 }
