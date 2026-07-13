@@ -104,7 +104,7 @@ export function buildCertColorMap(certNames: string[]): Map<string, string> {
   return map;
 }
 
-function formatMonthYear(value: string | null): string {
+export function formatMonthYear(value: string | null): string {
   if (!value) return "";
   const d = parseDateStr(value);
   if (Number.isNaN(d.getTime())) return value;

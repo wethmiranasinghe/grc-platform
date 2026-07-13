@@ -17,7 +17,7 @@
 import { Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { AgingRiskItem } from "../../api/riskApi";
-import { formatDate } from "../dashboard/constants";
+import { formatDate } from "../risk-registers/utils";
 
 interface AgingRisksTableProps {
   data: AgingRiskItem[];
