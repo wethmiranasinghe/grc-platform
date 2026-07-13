@@ -14,18 +14,93 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { Box, Typography } from "@wso2/oxygen-ui";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Typography,
+} from "@wso2/oxygen-ui";
 import type { JSX } from "react";
+import { useAuthApiClient } from "@hooks/useAuthApiClient";
+import {
+  fetchDashboard,
+  fetchRiskScores,
+  type DashboardSummary,
+  type RiskScore,
+} from "../api/riskApi";
+import DashboardView from "./dashboard/DashboardView";
 
+// Risk dashboard: current organisational risk posture built from a single
+// GET /api/v1/risks/dashboard payload, plus the 3×3 risk_score matrix that
+// colors heatmap cells holding no risks.
 export default function RiskDashboard(): JSX.Element {
+  const authFetch = useAuthApiClient();
+  const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
+  const [scores, setScores] = useState<RiskScore[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [summary, scoreMatrix] = await Promise.all([
+        fetchDashboard(authFetch),
+        fetchRiskScores(authFetch).catch(() => [] as RiskScore[]),
+      ]);
+      setDashboard(summary);
+      setScores(scoreMatrix);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load the dashboard.");
+    } finally {
+      setLoading(false);
+    }
+  }, [authFetch]);
+
+  // Run once on mount, not on every `load` identity change — matches
+  // RiskRegisters.tsx's initial-fetch effect. `load` depends on authFetch,
+  // whose stability isn't a documented @asgardeo/react guarantee, so gating
+  // on `load` risks a refetch loop if that internal detail ever changes.
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Risk Hub
-      </Typography>
-      <Typography variant="body1" color="text.secondary">
-        Risk dashboard coming soon.
-      </Typography>
+    <Box sx={{ p: 3, display: "flex", flexDirection: "column", gap: 3 }}>
+      <Box>
+        <Typography variant="h4" fontWeight={700}>
+          Risk Dashboard
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          Overview of organizational risk posture
+        </Typography>
+      </Box>
+
+      {loading && (
+        <Box sx={{ display: "flex", justifyContent: "center", py: 10 }}>
+          <CircularProgress />
+        </Box>
+      )}
+
+      {!loading && error && (
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" size="small" onClick={() => void load()}>
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
+      )}
+
+      {!loading && !error && dashboard && (
+        <DashboardView dashboard={dashboard} scores={scores} />
+      )}
     </Box>
   );
 }
