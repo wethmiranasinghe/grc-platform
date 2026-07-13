@@ -17,6 +17,7 @@
 import { Box, Chip, Paper, Stack, Typography } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { RegisterAnalytics, RiskScore } from "../../api/riskApi";
+import { darkCardSx } from "../cardStyles";
 import { LEVEL_FALLBACK_COLORS, LEVEL_LABELS } from "./constants";
 import LevelTreatmentChart from "./LevelTreatmentChart";
 import RiskHeatmap from "./RiskHeatmap";
@@ -30,7 +31,7 @@ interface RegisterSectionProps {
 // level × treatment stacked bar on the right, level-count chips up top.
 export default function RegisterSection({ register, scores }: RegisterSectionProps): JSX.Element {
   return (
-    <Paper variant="outlined" sx={{ p: 2.5 }}>
+    <Paper variant="outlined" sx={{ p: 2.5, ...darkCardSx }}>
       <Stack direction="row" alignItems="center" spacing={1.5} flexWrap="wrap" sx={{ mb: 2 }}>
         <Typography variant="subtitle1" fontWeight={600}>
           {register.register_name}

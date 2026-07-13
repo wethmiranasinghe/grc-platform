@@ -18,6 +18,7 @@ import { Box, Card, CardContent, Typography } from "@wso2/oxygen-ui";
 import { AlertTriangle, CheckCircle, Clock, ClipboardList } from "@wso2/oxygen-ui-icons-react";
 import type { JSX, ReactNode } from "react";
 import type { RiskStatusSummary } from "../../api/riskApi";
+import { darkCardSx } from "../cardStyles";
 
 interface SummaryCardsProps {
   summary: RiskStatusSummary;
@@ -33,7 +34,7 @@ interface StatTileProps {
 
 function StatTile({ count, pct, label, icon, iconColor }: StatTileProps): JSX.Element {
   return (
-    <Card variant="outlined">
+    <Card variant="outlined" sx={{ ...darkCardSx }}>
       <CardContent>
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
           <Box sx={{ color: `${iconColor}.main`, display: "flex", alignItems: "center" }}>

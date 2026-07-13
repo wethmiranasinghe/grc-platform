@@ -80,6 +80,7 @@ import type {
 } from "../api/riskApi";
 import { useAuthApiClient } from "@hooks/useAuthApiClient";
 import { useRiskPrivileges } from "../hooks/useRiskPrivileges";
+import { darkCardSx } from "./cardStyles";
 import RiskDetailDrawer from "./risk-registers/RiskDetailDrawer";
 import RejectDialog from "./risk-registers/RejectDialog";
 import ReassessmentDialog from "./risk-registers/ReassessmentDialog";
@@ -520,7 +521,7 @@ export default function RiskRegisters(): JSX.Element {
         </Tabs>
       </Box>
 
-      <Box sx={{ mb: 2 }}>
+      <Paper variant="outlined" sx={{ p: 2, mb: 2, ...darkCardSx }}>
         <FilterBar
           filters={filters}
           teams={sourceTeams}
@@ -531,7 +532,7 @@ export default function RiskRegisters(): JSX.Element {
           onChange={setFilters}
           onRefresh={loadRisks}
         />
-      </Box>
+      </Paper>
 
       {actionError && (
         <Alert severity="error" onClose={() => setActionError("")} sx={{ mb: 2 }}>
@@ -544,7 +545,7 @@ export default function RiskRegisters(): JSX.Element {
         </Alert>
       )}
 
-      <Paper variant="outlined">
+      <Paper variant="outlined" sx={darkCardSx}>
         <TableContainer>
           <Table size="small">
             <TableHead>

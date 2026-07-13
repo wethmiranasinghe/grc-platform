@@ -37,6 +37,7 @@ import RiskAssessmentStep from "./add-risk/RiskAssessmentStep";
 import ActionPlanStep from "./add-risk/ActionPlanStep";
 import { buildRiskCode, getCurrentQuarter, getCurrentYear } from "./add-risk/constants";
 import type { AddRiskFormValues } from "./add-risk/types";
+import { darkCardSx } from "./cardStyles";
 import {
   createRisk,
   fetchAssignmentTeams,
@@ -318,10 +319,7 @@ export default function AddRisk(): JSX.Element {
           sx={{
             p: { xs: 2, sm: 4 },
             borderRadius: 2,
-            "[data-color-scheme='dark'] &": {
-              backgroundColor: "rgba(36, 36, 36, 0.6)",
-              borderColor: "rgba(255, 255, 255, 0.16)",
-            },
+            ...darkCardSx,
           }}
           onSubmit={(e) => e.preventDefault()}
           noValidate

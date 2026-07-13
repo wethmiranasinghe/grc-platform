@@ -14,23 +14,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { Paper, Typography } from "@wso2/oxygen-ui";
-import type { JSX, ReactNode } from "react";
-import { darkCardSx } from "../cardStyles";
-
-interface ChartCardProps {
-  title: string;
-  children: ReactNode;
-}
-
-// Shared card shell for every dashboard chart and table.
-export default function ChartCard({ title, children }: ChartCardProps): JSX.Element {
-  return (
-    <Paper variant="outlined" sx={{ p: 2.5, height: "100%", ...darkCardSx }}>
-      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-        {title}
-      </Typography>
-      {children}
-    </Paper>
-  );
-}
+// Oxygen UI's dark theme gives Paper/Card a near-black background
+// (background.paper: "#000000b8"), which is indistinguishable from the
+// page background. This override lightens the card so it reads as a
+// distinct surface in dark mode, matched across every card/table/chart
+// container in the Risk module (Add Risk, Dashboard, Analytics, Registers).
+export const darkCardSx = {
+  "[data-color-scheme='dark'] &": {
+    backgroundColor: "rgba(36, 36, 36, 0.6)",
+    borderColor: "rgba(255, 255, 255, 0.16)",
+  },
+};

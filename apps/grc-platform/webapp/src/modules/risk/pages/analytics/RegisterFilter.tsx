@@ -14,9 +14,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { FormControl, InputLabel, MenuItem, Select } from "@wso2/oxygen-ui";
+import { FormControl, InputLabel, MenuItem, Paper, Select } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { RiskTeam } from "../../api/riskApi";
+import { darkCardSx } from "../cardStyles";
 
 interface RegisterFilterProps {
   teams: RiskTeam[];
@@ -28,20 +29,23 @@ interface RegisterFilterProps {
 // The register-comparison donut only renders when value === 0 ("All").
 export default function RegisterFilter({ teams, value, onChange }: RegisterFilterProps): JSX.Element {
   return (
-    <FormControl size="small" sx={{ minWidth: 200 }}>
-      <InputLabel>Register</InputLabel>
-      <Select
-        label="Register"
-        value={value || ""}
-        onChange={(e) => onChange(Number(e.target.value) || 0)}
-      >
-        <MenuItem value="">All Registers</MenuItem>
-        {teams.map((t) => (
-          <MenuItem key={t.id} value={t.id}>
-            {t.name}
-          </MenuItem>
-        ))}
-      </Select>
-    </FormControl>
+    <Paper elevation={0} sx={{ p: 1, ...darkCardSx }}>
+      <FormControl size="small" sx={{ minWidth: 200 }}>
+        <InputLabel>Register</InputLabel>
+        <Select
+          label="Register"
+          value={value || ""}
+          onChange={(e) => onChange(Number(e.target.value) || 0)}
+          sx={{ "& .MuiOutlinedInput-notchedOutline": { border: "none" } }}
+        >
+          <MenuItem value="">All Registers</MenuItem>
+          {teams.map((t) => (
+            <MenuItem key={t.id} value={t.id}>
+              {t.name}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    </Paper>
   );
 }
