@@ -127,6 +127,12 @@ type AnalyticsRepository interface {
 	// LevelDistribution returns, per month since `since` × effective level,
 	// the count of risks identified that month.
 	LevelDistribution(ctx context.Context, registerID *int, since string) ([]model.MonthLevelCount, error)
+	// IdentifiedTrendByRegister returns, per month since `since` × register,
+	// the count of risks identified that month.
+	IdentifiedTrendByRegister(ctx context.Context, registerID *int, since string) ([]model.MonthRegisterCount, error)
+	// ClosedTrendByRegister returns, per month since `since` × register, the
+	// count of risks closed that month.
+	ClosedTrendByRegister(ctx context.Context, registerID *int, since string) ([]model.MonthRegisterCount, error)
 	// RegisterTotals returns total risk count (all-time, all statuses except
 	// CANCELLED) per register, for the cross-register comparison donut.
 	RegisterTotals(ctx context.Context) ([]model.RegisterShare, error)

@@ -318,6 +318,12 @@ export interface MonthLevelCount {
   count: number;
 }
 
+export interface MonthRegisterCount {
+  month: string;
+  register_name: string;
+  count: number;
+}
+
 export interface RegisterShare {
   register_name: string;
   count: number;
@@ -354,6 +360,8 @@ export interface AnalyticsSummary {
   kpis: AnalyticsKPIs;
   trend: TrendPoint[];
   level_distribution: MonthLevelCount[];
+  identified_by_register: MonthRegisterCount[] | null;
+  closed_by_register: MonthRegisterCount[] | null;
   register_shares: RegisterShare[] | null;
   compliance_distribution: ComplianceShare[];
   treatment_mix: TreatmentShare[];

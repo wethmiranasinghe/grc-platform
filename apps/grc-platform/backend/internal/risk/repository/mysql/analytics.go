@@ -187,6 +187,66 @@ func (a *analyticsRepository) LevelDistribution(ctx context.Context, registerID 
 	return out, rows.Err()
 }
 
+func (a *analyticsRepository) IdentifiedTrendByRegister(ctx context.Context, registerID *int, since string) ([]model.MonthRegisterCount, error) {
+	clause, filterArgs := registerFilter(registerID)
+	args := append([]any{model.StatusCancelled, since}, filterArgs...)
+
+	rows, err := a.db.QueryContext(ctx, `
+		SELECT DATE_FORMAT(r.risk_identified_date, '%Y-%m-01'), st.name, COUNT(*)
+		FROM risk r
+		JOIN risk_team st ON st.id = r.source_register_id
+		WHERE r.workflow_status <> ?
+		  AND r.risk_identified_date >= ?`+clause+`
+		GROUP BY 1, st.name
+		ORDER BY 1`,
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("analytics identified trend by register: %w", err)
+	}
+	defer rows.Close()
+
+	var out []model.MonthRegisterCount
+	for rows.Next() {
+		var m model.MonthRegisterCount
+		if err := rows.Scan(&m.Month, &m.RegisterName, &m.Count); err != nil {
+			return nil, fmt.Errorf("scan identified trend by register row: %w", err)
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+func (a *analyticsRepository) ClosedTrendByRegister(ctx context.Context, registerID *int, since string) ([]model.MonthRegisterCount, error) {
+	clause, filterArgs := registerFilter(registerID)
+	args := append([]any{model.StatusClosed, since}, filterArgs...)
+
+	rows, err := a.db.QueryContext(ctx, `
+		SELECT DATE_FORMAT(r.updated_at, '%Y-%m-01'), st.name, COUNT(*)
+		FROM risk r
+		JOIN risk_team st ON st.id = r.source_register_id
+		WHERE r.workflow_status = ?
+		  AND r.updated_at >= ?`+clause+`
+		GROUP BY 1, st.name
+		ORDER BY 1`,
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("analytics closed trend by register: %w", err)
+	}
+	defer rows.Close()
+
+	var out []model.MonthRegisterCount
+	for rows.Next() {
+		var m model.MonthRegisterCount
+		if err := rows.Scan(&m.Month, &m.RegisterName, &m.Count); err != nil {
+			return nil, fmt.Errorf("scan closed trend by register row: %w", err)
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 func (a *analyticsRepository) RegisterTotals(ctx context.Context) ([]model.RegisterShare, error) {
 	rows, err := a.db.QueryContext(ctx, `
 		SELECT st.name, COUNT(*)

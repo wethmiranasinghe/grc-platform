@@ -19,6 +19,7 @@ package service
 import (
 	"context"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/wso2-open-operations/grc-platform/backend/internal/risk/model"
@@ -71,11 +72,22 @@ func (s *analyticsService) Summary(ctx context.Context, registerID *int) (*model
 	}
 
 	var registerShares []model.RegisterShare
+	var identifiedByRegister, closedByRegister []model.MonthRegisterCount
 	if registerID == nil {
 		registerShares, err = s.repo.RegisterTotals(ctx)
 		if err != nil {
 			return nil, err
 		}
+		identifiedRows, err := s.repo.IdentifiedTrendByRegister(ctx, registerID, dateString(since))
+		if err != nil {
+			return nil, err
+		}
+		closedRows, err := s.repo.ClosedTrendByRegister(ctx, registerID, dateString(since))
+		if err != nil {
+			return nil, err
+		}
+		identifiedByRegister = buildTrendByRegister(months, identifiedRows)
+		closedByRegister = buildTrendByRegister(months, closedRows)
 	}
 
 	complianceShares, err := s.repo.ComplianceDistribution(ctx, registerID)
@@ -99,14 +111,16 @@ func (s *analyticsService) Summary(ctx context.Context, registerID *int) (*model
 	}
 
 	return &model.AnalyticsSummary{
-		KPIs:              *kpis,
-		Trend:             buildTrend(months, identified, closed),
-		LevelDistribution: buildLevelDistribution(months, levelRows),
-		RegisterShares:    registerShares,
-		ComplianceShares:  complianceShares,
-		TreatmentShares:   treatmentShares,
-		WorkflowFunnel:    funnel,
-		AgingRisks:        aging,
+		KPIs:                 *kpis,
+		Trend:                buildTrend(months, identified, closed),
+		LevelDistribution:    buildLevelDistribution(months, levelRows),
+		IdentifiedByRegister: identifiedByRegister,
+		ClosedByRegister:     closedByRegister,
+		RegisterShares:       registerShares,
+		ComplianceShares:     complianceShares,
+		TreatmentShares:      treatmentShares,
+		WorkflowFunnel:       funnel,
+		AgingRisks:           aging,
 	}, nil
 }
 
@@ -175,6 +189,39 @@ func buildLevelDistribution(months []string, rows []model.MonthLevelCount) []mod
 				RiskLevel: level,
 				ColorCode: levelFallbackColor(level),
 				Count:     0,
+			})
+		}
+	}
+	return out
+}
+
+// buildTrendByRegister zero-fills every month for each register that has at
+// least one row somewhere in the window — a register with no activity at all
+// in the last trendWindowMonths gets no line, but once a register qualifies,
+// every one of its months is present (zero where absent) so its line spans
+// the full chart width. Register set is derived from the data, not a fixed
+// list, since registers can be added over time.
+func buildTrendByRegister(months []string, rows []model.MonthRegisterCount) []model.MonthRegisterCount {
+	type key struct{ month, register string }
+	counts := map[key]int{}
+	var registers []string
+	seenRegister := map[string]bool{}
+	for _, r := range rows {
+		counts[key{r.Month, r.RegisterName}] = r.Count
+		if !seenRegister[r.RegisterName] {
+			seenRegister[r.RegisterName] = true
+			registers = append(registers, r.RegisterName)
+		}
+	}
+	sort.Strings(registers)
+
+	out := make([]model.MonthRegisterCount, 0, len(months)*len(registers))
+	for _, register := range registers {
+		for _, month := range months {
+			out = append(out, model.MonthRegisterCount{
+				Month:        month,
+				RegisterName: register,
+				Count:        counts[key{month, register}],
 			})
 		}
 	}

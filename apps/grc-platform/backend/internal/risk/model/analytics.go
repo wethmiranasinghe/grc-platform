@@ -27,17 +27,20 @@ package model
 //   - Risk level/score use the effective residual score: the latest
 //     risk_assessment score when one exists, else the gross score.
 //   - RegisterID, when non-nil, scopes every field to that register except
-//     RegisterShares, which is a cross-register comparison and is only
-//     populated when RegisterID is nil (i.e. the "All registers" view).
+//     RegisterShares, IdentifiedByRegister, and ClosedByRegister, which are
+//     cross-register comparisons and are only populated when RegisterID is
+//     nil (i.e. the "All registers" view).
 type AnalyticsSummary struct {
-	KPIs               AnalyticsKPIs        `json:"kpis"`
-	Trend              []TrendPoint         `json:"trend"`
-	LevelDistribution  []MonthLevelCount    `json:"level_distribution"`
-	RegisterShares     []RegisterShare      `json:"register_shares"`
-	ComplianceShares   []ComplianceShare    `json:"compliance_distribution"`
-	TreatmentShares    []TreatmentShare     `json:"treatment_mix"`
-	WorkflowFunnel     []WorkflowStageCount `json:"workflow_funnel"`
-	AgingRisks         []AgingRiskItem      `json:"aging_risks"`
+	KPIs                 AnalyticsKPIs        `json:"kpis"`
+	Trend                []TrendPoint         `json:"trend"`
+	LevelDistribution    []MonthLevelCount    `json:"level_distribution"`
+	IdentifiedByRegister []MonthRegisterCount `json:"identified_by_register"`
+	ClosedByRegister     []MonthRegisterCount `json:"closed_by_register"`
+	RegisterShares       []RegisterShare      `json:"register_shares"`
+	ComplianceShares     []ComplianceShare    `json:"compliance_distribution"`
+	TreatmentShares      []TreatmentShare     `json:"treatment_mix"`
+	WorkflowFunnel       []WorkflowStageCount `json:"workflow_funnel"`
+	AgingRisks           []AgingRiskItem      `json:"aging_risks"`
 }
 
 // AnalyticsKPIs backs the three "Key Risk Metrics" tiles.
@@ -69,6 +72,17 @@ type MonthLevelCount struct {
 	RiskLevel string `json:"risk_level"`
 	ColorCode string `json:"color_code"`
 	Count     int    `json:"count"`
+}
+
+// MonthRegisterCount is one line-point of the "Risks Identified by Source
+// Register" / "Risks Closed by Source Register" trend charts (x = month,
+// one line per register). Only registers with at least one identified/closed
+// risk in the trailing 12-month window get a line at all; once a register
+// has one, every month is zero-filled so its line spans the full window.
+type MonthRegisterCount struct {
+	Month        string `json:"month"`
+	RegisterName string `json:"register_name"`
+	Count        int    `json:"count"`
 }
 
 // RegisterShare is one slice of the "Risks by Register" comparison donut:
