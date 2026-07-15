@@ -118,6 +118,9 @@ export interface RiskAssessmentRecord {
   residual_rating: number;
   residual_level: string;
   residual_color_code: string;
+  // Marks a synthetic entry for the risk's gross score, added by the backend
+  // so the log shows the full lineage even though it isn't a real reassessment.
+  is_initial?: boolean;
 }
 
 export interface RiskDetail {
@@ -156,7 +159,13 @@ export interface RiskDetail {
   assigner_name: string;
   identified_by_user_name: string | null;
   compliance_approver_name: string | null;
+  // Original rating from creation; immutable once a risk owner has approved
+  // the risk. Only EditRiskDialog should read this — for display, use
+  // effective_score.
   gross_score: RiskScoreInfo | null;
+  // Current residual score: the latest reassessment's score if one exists,
+  // else gross_score. This is what headers/tables should display.
+  effective_score: RiskScoreInfo | null;
   compliance_references: ComplianceReference[];
   action_plan: ActionPlanDetail | null;
   assessments: RiskAssessmentRecord[];

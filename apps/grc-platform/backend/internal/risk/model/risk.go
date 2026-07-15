@@ -197,8 +197,16 @@ type RiskDetail struct {
 	IdentifiedByUserName   *string `json:"identified_by_user_name"`
 	ComplianceApproverName *string `json:"compliance_approver_name"`
 
-	// Gross score (from risk_score join)
+	// Gross score (from risk_score join) — the original rating assigned at
+	// creation, immutable once a risk owner has approved the risk. Used by
+	// EditRiskDialog to pre-fill the edit form; do not repurpose for display
+	// of the risk's current standing, see EffectiveScore.
 	GrossScore *RiskScore `json:"gross_score"`
+	// EffectiveScore is the risk's current residual score: the latest
+	// reassessment's score when one exists, else the gross score — the same
+	// "effective residual score" convention used by the dashboard/analytics
+	// repositories. This is what tables and headers should display.
+	EffectiveScore *RiskScore `json:"effective_score"`
 
 	// Related entities
 	ComplianceReferences []ComplianceReference `json:"compliance_references"`

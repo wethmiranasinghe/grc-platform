@@ -93,7 +93,10 @@ export default function DateRangeFilter({
           },
         }}
       >
-        <Filter size={12} />
+        {/* oxygen-ui-icons-react ships a global ".lucide { stroke-width: 1.5px }"
+            rule that overrides the strokeWidth prop (a CSS class rule beats an
+            SVG presentation attribute) — an inline style wins over it instead. */}
+        <Filter size={14} style={{ strokeWidth: 1 }} />
       </IconButton>
 
       <Popover
