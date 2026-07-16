@@ -84,7 +84,7 @@ func (r *userRepo) SearchUsers(ctx context.Context, req domain.SearchUsersReques
 
 func (r *userRepo) GetUserByID(ctx context.Context, id int) (*domain.User, error) {
 	row := r.db.QueryRowContext(ctx,
-		"SELECT id, email, display_name, audit_team_id, risk_team_id, status, created_at, updated_at FROM `user` WHERE id = ?", id)
+		"SELECT id, email, display_name, user_type, audit_team_id, risk_team_id, status, created_at, updated_at FROM `user` WHERE id = ?", id)
 	u, err := scanUser(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("user %d not found", id)}
@@ -97,7 +97,7 @@ func (r *userRepo) GetUserByID(ctx context.Context, id int) (*domain.User, error
 
 func (r *userRepo) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	row := r.db.QueryRowContext(ctx,
-		"SELECT id, email, display_name, audit_team_id, risk_team_id, status, created_at, updated_at FROM `user` WHERE email = ?", email)
+		"SELECT id, email, display_name, user_type, audit_team_id, risk_team_id, status, created_at, updated_at FROM `user` WHERE email = ?", email)
 	u, err := scanUser(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("user with email %q not found", email)}

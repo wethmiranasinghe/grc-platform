@@ -95,7 +95,7 @@ type DashboardControlItem struct {
 	Description   string `json:"description"`
 	Status        string `json:"status"`
 	DueDate       string `json:"dueDate"`
-	Team         string `json:"team"`
+	Team          string `json:"team"`
 	ProcessOwner  string `json:"processOwner"`
 }
 

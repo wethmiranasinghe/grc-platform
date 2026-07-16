@@ -59,6 +59,9 @@ type Config struct {
 	// When nil, privilege checking is skipped and HasPrivilege always returns true.
 	// Set to nil for local dev (TokenValidatorEnabled=false); always set in production.
 	PrivilegeStore *privilege.Store
+	// TestKeyFuncs maps issuer → jwt.Keyfunc, bypassing JWKS cache construction.
+	// Never set in production; used by unit tests to inject pre-built key functions.
+	TestKeyFuncs map[string]jwt.Keyfunc
 }
 
 // evidenceAppPrivilegeCeiling is the single source of truth for what an
@@ -223,6 +226,11 @@ func Auth(cfg Config) func(http.Handler) http.Handler {
 	idps := make(map[string]idpRuntime, len(cfg.IdPs))
 	if cfg.TokenValidatorEnabled {
 		for _, idp := range cfg.IdPs {
+			if kf, ok := cfg.TestKeyFuncs[idp.Issuer]; ok {
+				// Test override: skip JWKS cache and HTTPS requirement.
+				idps[idp.Issuer] = idpRuntime{cfg: idp, keyFunc: kf}
+				continue
+			}
 			u, parseErr := url.Parse(idp.JWKSEndpoint)
 			if parseErr != nil || u.Scheme != "https" {
 				panic("auth: JWKS endpoint must use https, got: " + idp.JWKSEndpoint)

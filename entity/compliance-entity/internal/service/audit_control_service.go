@@ -300,6 +300,20 @@ func (s *controlService) UpdateControl(ctx context.Context, auditID, controlID i
 	if req.UpdatedBy == "" {
 		return domain.AuditControl{}, &apierror.ValidationError{Msg: "updatedBy is required"}
 	}
+	if req.ControlType != nil {
+		upper := strings.ToUpper(*req.ControlType)
+		if !validControlTypes[upper] {
+			return domain.AuditControl{}, &apierror.ValidationError{Msg: "invalid controlType: " + *req.ControlType}
+		}
+		req.ControlType = &upper
+	}
+	if req.Scope != nil {
+		upper := strings.ToUpper(*req.Scope)
+		if !validScopes[upper] {
+			return domain.AuditControl{}, &apierror.ValidationError{Msg: "invalid scope: " + *req.Scope}
+		}
+		req.Scope = &upper
+	}
 	if req.Status != nil {
 		if !validControlStatuses[strings.ToUpper(*req.Status)] {
 			return domain.AuditControl{}, &apierror.ValidationError{Msg: "invalid status: " + *req.Status}

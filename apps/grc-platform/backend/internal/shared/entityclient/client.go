@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -93,6 +94,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 
 	resp, err := c.http.Do(req)
 	if err != nil {
+		slog.ErrorContext(ctx, "entity request failed", "method", method, "path", path, "err", err)
 		return &apierror.Error{StatusCode: http.StatusServiceUnavailable, Body: "data service unavailable"}
 	}
 	defer resp.Body.Close()

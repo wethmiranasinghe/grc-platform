@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS `user` (
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `role` (
   id           INT          NOT NULL AUTO_INCREMENT,
-  role_name    VARCHAR(150) NOT NULL COMMENT 'Must match the Asgardeo JWT role claim string exactly',
+  role_name    VARCHAR(150) COLLATE utf8mb4_bin NOT NULL COMMENT 'Must match the Asgardeo JWT role claim string exactly; binary collation enforces case-sensitivity consistent with Go map lookup',
   description  TEXT         NULL,
   status       ENUM('ACTIVE','INACTIVE') NOT NULL DEFAULT 'ACTIVE',
   created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

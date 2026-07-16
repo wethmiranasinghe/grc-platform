@@ -17,6 +17,8 @@
 package main
 
 import (
+	"log/slog"
+
 	audithandler "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/handler"
 	auditentity "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/repository/entity"
 	auditservice "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/service"
@@ -60,7 +62,11 @@ func buildAuditDeps(fileSvc *file.Service, ec *entityclient.Client, aiCfg config
 	// AI validation trigger client — only when explicitly enabled per env.
 	var aiAgent *aiagent.Client
 	if aiCfg.Enabled {
-		aiAgent = aiagent.New(aiCfg.AgentBaseURL, aiCfg.AgentAPIKey)
+		if aiCfg.AgentAPIKey == "" {
+			slog.Error("AI_VALIDATION_ENABLED=true but AI_AGENT_API_KEY is not set — disabling AI validation to avoid per-request 401s")
+		} else {
+			aiAgent = aiagent.New(aiCfg.AgentBaseURL, aiCfg.AgentAPIKey)
+		}
 	}
 
 	return audithandler.Deps{
