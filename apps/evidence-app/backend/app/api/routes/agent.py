@@ -16,6 +16,7 @@ from app.models.evidence_file import EvidenceFile
 from app.models.submission import Submission
 from app.models.usage_log import UsageLog
 from app.schemas.agent_task import TaskCreate, TaskOut, TaskProgress, TaskResult
+from app.storage.blob_storage import save_file
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
@@ -33,6 +34,13 @@ def _sse_publish(task_id: int, payload: str) -> None:
             q.put_nowait(payload)
         except asyncio.QueueFull:
             pass  # slow client — drop rather than block
+
+
+def _authorize_task_access(task: AgentTask, user: User) -> None:
+    """Shared owner-or-admin check for the get/stream/cancel/resume task
+    endpoints: only the Agent Task's owner or an Admin may access it."""
+    if user.role != "admin" and task.user_email != user.email:
+        raise HTTPException(403)
 
 
 @router.post("/tasks", response_model=TaskOut)
@@ -138,8 +146,7 @@ async def get_task(
     task = db.query(AgentTask).filter(AgentTask.id == task_id).first()
     if not task:
         raise HTTPException(404)
-    if user.role != "admin" and task.user_email != user.email:
-        raise HTTPException(403)
+    _authorize_task_access(task, user)
     return task
 
 
@@ -154,8 +161,7 @@ async def stream_task(
     task = db.query(AgentTask).filter(AgentTask.id == task_id).first()
     if not task:
         raise HTTPException(404)
-    if user.role != "admin" and task.user_email != user.email:
-        raise HTTPException(403)
+    _authorize_task_access(task, user)
 
     initial_payload = TaskOut.model_validate(task).model_dump_json()
     is_done = task.status in ("completed", "failed", "cancelled")
@@ -214,8 +220,7 @@ async def cancel_task(
     task = db.query(AgentTask).filter(AgentTask.id == task_id).first()
     if not task:
         raise HTTPException(404)
-    if user.role != "admin" and task.user_email != user.email:
-        raise HTTPException(403)
+    _authorize_task_access(task, user)
     if task.status in ("completed", "failed", "cancelled"):
         raise HTTPException(400, "Task already finished")
     task.status = "cancelled"
@@ -236,8 +241,7 @@ async def resume_task(
     task = db.query(AgentTask).filter(AgentTask.id == task_id).first()
     if not task:
         raise HTTPException(404)
-    if user.role != "admin" and task.user_email != user.email:
-        raise HTTPException(403)
+    _authorize_task_access(task, user)
     if task.status in ("completed", "failed", "cancelled"):
         raise HTTPException(400, "Task already finished")
     task.resume_requested = True
@@ -371,6 +375,5 @@ async def upload_screenshot(
     """Runner uploads a PNG screenshot here before posting the task result."""
     # Uploading means the runner is alive and working — keep it "online".
     _last_poll[user.email] = datetime.now(timezone.utc)
-    from app.storage.blob_storage import save_file
     file_name, file_url = save_file(file)
     return {"file_name": file_name, "file_url": file_url}

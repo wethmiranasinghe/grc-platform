@@ -4,14 +4,6 @@ from pydantic import BaseModel, model_validator
 from app.storage.blob_storage import get_signed_url
 
 
-class EvidenceCreate(BaseModel):
-    title: str
-    description: str | None = None
-    file_name: str
-    file_url: str
-    control_id: int
-
-
 class EvidenceFileOut(BaseModel):
     id: int
     file_name: str
