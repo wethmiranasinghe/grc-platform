@@ -1,0 +1,57 @@
+from __future__ import annotations
+from datetime import datetime
+from pydantic import BaseModel
+
+
+class TaskCreate(BaseModel):
+    prompt: str
+    region_hint: str | None = None
+    portal_url: str | None = None
+    control_id: int | None = None
+    title: str | None = None
+    kind: str = "run"  # "run" | "login" — login tasks treat `prompt` as a URL to open
+    max_steps: int | None = None
+    use_vision: bool | None = None
+    max_actions_per_step: int | None = None
+
+
+class TaskOut(BaseModel):
+    id: int
+    user_email: str
+    prompt: str
+    region_hint: str | None
+    portal_url: str | None
+    control_id: int | None
+    title: str | None
+    kind: str
+    status: str
+    runner_id: str | None
+    progress: dict | None
+    result: dict | None
+    error: str | None
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    max_steps: int | None = None
+    use_vision: bool | None = None
+    max_actions_per_step: int | None = None
+    resume_requested: bool = False
+
+    model_config = {"from_attributes": True}
+
+
+class TaskProgress(BaseModel):
+    subtasks: list[dict] = []
+    current_index: int = 0
+    total_usage: dict | None = None
+    # Set by the runner when a {PAUSE} step is reached; drives the UI's Resume banner.
+    paused: bool = False
+    pause_message: str | None = None
+
+
+class TaskResult(BaseModel):
+    status: str  # "completed" | "failed"
+    result: str | None = None
+    error: str | None = None
+    screenshots: list[dict] | None = None
+    total_usage: dict | None = None
