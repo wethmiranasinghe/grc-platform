@@ -4,7 +4,6 @@ from pydantic import BaseModel
 
 class SubmissionCreate(BaseModel):
     evidence_id: int
-    submitted_by: str | None = None  # defaults to current user's email if omitted
     notes: str | None = None
 
 

@@ -129,3 +129,71 @@ def test_update_status_of_missing_submission_is_404(engineer_client):
     response = engineer_client.patch("/api/submissions/999999", json={"status": "approved"})
 
     assert response.status_code == 404
+
+
+def _make_evidence(db_session, *, created_by: str, title: str) -> Evidence:
+    evidence = Evidence(
+        title=title,
+        description="test evidence",
+        file_name=f"{title}.png",
+        file_url=f"/uploads/{title}.png",
+        control_id=None,
+        created_by=created_by,
+    )
+    db_session.add(evidence)
+    db_session.commit()
+    db_session.refresh(evidence)
+    return evidence
+
+
+def test_engineer_creating_submission_against_another_engineers_evidence_is_refused(db_session, engineer_client):
+    theirs = _make_evidence(db_session, created_by="other-engineer@example.com", title="other-evidence")
+
+    response = engineer_client.post(
+        "/api/submissions", json={"evidence_id": theirs.id, "notes": "sneaky"}
+    )
+
+    assert response.status_code == 403
+
+
+def test_engineer_creating_submission_against_own_evidence_succeeds(db_session, engineer_client, engineer_user):
+    own = _make_evidence(db_session, created_by=engineer_user.email, title="own-evidence")
+
+    response = engineer_client.post(
+        "/api/submissions", json={"evidence_id": own.id, "notes": "here it is"}
+    )
+
+    assert response.status_code == 201
+    assert response.json()["evidence_id"] == own.id
+    assert response.json()["submitted_by"] == engineer_user.email
+
+
+def test_admin_creating_submission_against_any_evidence_succeeds(db_session, admin_client):
+    theirs = _make_evidence(db_session, created_by="some-engineer@example.com", title="some-evidence")
+
+    response = admin_client.post(
+        "/api/submissions", json={"evidence_id": theirs.id, "notes": "admin override"}
+    )
+
+    assert response.status_code == 201
+    assert response.json()["evidence_id"] == theirs.id
+
+
+def test_spoofed_submitted_by_in_payload_is_ignored(db_session, engineer_client, engineer_user):
+    own = _make_evidence(db_session, created_by=engineer_user.email, title="own-evidence")
+
+    response = engineer_client.post(
+        "/api/submissions",
+        json={"evidence_id": own.id, "submitted_by": "someone-else@example.com", "notes": "spoof attempt"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["submitted_by"] == engineer_user.email
+
+
+def test_creating_submission_against_missing_evidence_is_404(engineer_client):
+    response = engineer_client.post(
+        "/api/submissions", json={"evidence_id": 999999, "notes": "no such evidence"}
+    )
+
+    assert response.status_code == 404

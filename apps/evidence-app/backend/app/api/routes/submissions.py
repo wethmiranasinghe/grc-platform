@@ -22,11 +22,9 @@ def list_submissions(db: Session = Depends(get_db), user: User = Depends(get_cur
 
 @router.post("", response_model=SubmissionResponse, status_code=201)
 def create_submission(payload: SubmissionCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    data = payload.model_dump()
-    # Default to current user's identity if caller didn't override
-    if not data.get("submitted_by"):
-        data["submitted_by"] = user.email
-    submission = Submission(**data)
+    evidence = db.query(Evidence).filter(Evidence.id == payload.evidence_id).first()
+    _authorize_evidence_access(evidence, user)
+    submission = Submission(evidence_id=payload.evidence_id, submitted_by=user.email, notes=payload.notes)
     db.add(submission)
     db.commit()
     db.refresh(submission)
