@@ -110,16 +110,37 @@ def delete_evidence_file(file_id: int, db: Session = Depends(get_db), user: User
     if not ef:
         raise HTTPException(status_code=404, detail="File not found")
     evidence_id = ef.evidence_id
+    evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+    # The Evidence's own file_name/file_url is a separate, legacy reference
+    # alongside the EvidenceFile list (see ADR/spec for evidence.py:95): it
+    # is "primary" exactly when it still points at the file being deleted.
+    was_primary = evidence is not None and ef.file_name == evidence.file_name
+
     delete_file(ef.file_name)
     db.delete(ef)
     db.commit()
-    remaining = db.query(EvidenceFile).filter(EvidenceFile.evidence_id == evidence_id).count()
-    if remaining == 0:
-        evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
+
+    remaining = (
+        db.query(EvidenceFile)
+        .filter(EvidenceFile.evidence_id == evidence_id)
+        .order_by(EvidenceFile.sort_order)
+        .all()
+    )
+    if not remaining:
         if evidence:
             delete_file(evidence.file_name)
             db.delete(evidence)
             db.commit()
+    elif was_primary:
+        # Repoint at the next surviving file rather than clearing the
+        # reference: nulling it would push the inconsistency into every
+        # reader that expects it populated. The survivor is the remaining
+        # file with the lowest sort_order, i.e. the first file in the order
+        # the gallery is meant to present them.
+        survivor = remaining[0]
+        evidence.file_name = survivor.file_name
+        evidence.file_url = survivor.file_url
+        db.commit()
 
 
 @router.get("/{evidence_id}", response_model=EvidenceResponse)

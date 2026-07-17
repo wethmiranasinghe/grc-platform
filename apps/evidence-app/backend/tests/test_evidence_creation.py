@@ -12,41 +12,13 @@ delete_file". That distinction is the reason a real emulator was chosen
 over a fake in the first place.
 """
 import httpx
-from azure.storage.blob import BlobServiceClient
 
-from app.config import settings
-from app.models.control import Control
 from app.models.evidence_file import EvidenceFile
 from app.models.evidence import Evidence
-from app.models.framework import Framework
-from app.models.product import Product
 from app.models.submission import Submission
 from app.storage.blob_storage import get_signed_url
 
-
-def _uploaded_blob_names() -> set[str]:
-    """The names of every blob currently sitting in the test container —
-    used to assert an upload really did or did not survive a request, by
-    diffing this set before and after, rather than trusting that
-    `create_evidence` called `delete_file`."""
-    container = BlobServiceClient.from_connection_string(
-        settings.AZURE_STORAGE_CONNECTION_STRING
-    ).get_container_client(settings.AZURE_STORAGE_CONTAINER)
-    return {blob.name for blob in container.list_blobs()}
-
-
-def _make_control(db_session) -> Control:
-    product = Product(name="Test Product")
-    db_session.add(product)
-    db_session.flush()
-    framework = Framework(product_id=product.id, name="Test Framework")
-    db_session.add(framework)
-    db_session.flush()
-    control = Control(framework_id=framework.id, control_ref="C-1", title="Test Control")
-    db_session.add(control)
-    db_session.commit()
-    db_session.refresh(control)
-    return control
+from tests.conftest import make_control, uploaded_blob_names
 
 
 def test_create_evidence_end_to_end(db_session, engineer_client, engineer_user):
@@ -54,7 +26,7 @@ def test_create_evidence_end_to_end(db_session, engineer_client, engineer_user):
     Submission all exist, and the uploaded file is really fetchable —
     a real GET against the emulator, not an assertion that some internal
     upload function was called."""
-    control = _make_control(db_session)
+    control = make_control(db_session)
 
     response = engineer_client.post(
         "/api/evidence",
@@ -97,7 +69,7 @@ def test_deleting_evidence_file_really_removes_it_from_storage(
 ):
     """A later fetch of a deleted file's blob fails rather than succeeding —
     the property that matters, not whether `delete_file` was invoked."""
-    control = _make_control(db_session)
+    control = make_control(db_session)
 
     create_response = engineer_client.post(
         "/api/evidence",
@@ -150,7 +122,7 @@ def test_create_evidence_with_an_unknown_control_is_a_bad_request_not_a_server_e
     The parent is also resolved before the upload, so a doomed request never
     puts a blob into storage that would then need cleaning up.
     """
-    blobs_before = _uploaded_blob_names()
+    blobs_before = uploaded_blob_names()
 
     response = engineer_client.post(
         "/api/evidence",
@@ -162,7 +134,7 @@ def test_create_evidence_with_an_unknown_control_is_a_bad_request_not_a_server_e
     assert response.json()["detail"] == "Control not found"
 
     assert db_session.query(Evidence).count() == 0
-    assert _uploaded_blob_names() == blobs_before
+    assert uploaded_blob_names() == blobs_before
 
 
 def test_evidence_creation_leaves_nothing_behind_when_the_write_fails(
@@ -176,8 +148,8 @@ def test_evidence_creation_leaves_nothing_behind_when_the_write_fails(
     survive either — diffed against the container's real contents, never
     "delete_file was called".
     """
-    control = _make_control(db_session)
-    blobs_before = _uploaded_blob_names()
+    control = make_control(db_session)
+    blobs_before = uploaded_blob_names()
     _fail_partway(monkeypatch)
 
     response = engineer_client.post(
@@ -192,7 +164,7 @@ def test_evidence_creation_leaves_nothing_behind_when_the_write_fails(
     assert db_session.query(EvidenceFile).count() == 0
     assert db_session.query(Submission).count() == 0
 
-    assert _uploaded_blob_names() == blobs_before
+    assert uploaded_blob_names() == blobs_before
 
 
 def test_retry_after_a_failed_creation_produces_exactly_one_record(
@@ -201,7 +173,7 @@ def test_retry_after_a_failed_creation_produces_exactly_one_record(
     """A retry after a failure must not compete with debris from the first
     attempt: exactly one complete Evidence/Evidence File/Submission, and a
     file that really is fetchable — not one complete record and one broken."""
-    control = _make_control(db_session)
+    control = make_control(db_session)
 
     with monkeypatch.context() as failing:
         _fail_partway(failing)

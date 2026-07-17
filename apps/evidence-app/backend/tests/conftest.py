@@ -77,6 +77,9 @@ from app.auth import User, get_current_user
 from app.config import settings
 from app.database import Base, get_db
 from app.main import app
+from app.models.control import Control
+from app.models.framework import Framework
+from app.models.product import Product
 
 # Import every model so Base.metadata knows about all tables — mirrors the
 # import list in alembic/env.py, which needs the same thing for autogenerate.
@@ -343,3 +346,37 @@ def engineer_client(db_session, engineer_user):
 def admin_client(db_session, admin_user):
     """Same as `engineer_client`, but faked as an Admin."""
     yield from _client_as(db_session, admin_user)
+
+
+# --- Shared test helpers -----------------------------------------------
+#
+# Used by more than one test module (originally written for
+# test_evidence_creation.py; also needed by test_evidence_file_deletion.py),
+# so they live here rather than being copy-pasted between them.
+
+
+def uploaded_blob_names() -> set[str]:
+    """The names of every blob currently sitting in the test container —
+    used to assert an upload really did or did not survive a request, by
+    diffing this set before and after, rather than trusting that some
+    internal function was called."""
+    container = BlobServiceClient.from_connection_string(
+        settings.AZURE_STORAGE_CONNECTION_STRING
+    ).get_container_client(settings.AZURE_STORAGE_CONTAINER)
+    return {blob.name for blob in container.list_blobs()}
+
+
+def make_control(db_session) -> Control:
+    """A minimal Product/Framework/Control chain, for tests that need a
+    real control_id to attach Evidence to."""
+    product = Product(name="Test Product")
+    db_session.add(product)
+    db_session.flush()
+    framework = Framework(product_id=product.id, name="Test Framework")
+    db_session.add(framework)
+    db_session.flush()
+    control = Control(framework_id=framework.id, control_ref="C-1", title="Test Control")
+    db_session.add(control)
+    db_session.commit()
+    db_session.refresh(control)
+    return control
