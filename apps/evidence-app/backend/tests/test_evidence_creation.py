@@ -12,7 +12,9 @@ delete_file". That distinction is the reason a real emulator was chosen
 over a fake in the first place.
 """
 import httpx
+from azure.storage.blob import BlobServiceClient
 
+from app.config import settings
 from app.models.control import Control
 from app.models.evidence_file import EvidenceFile
 from app.models.evidence import Evidence
@@ -20,6 +22,17 @@ from app.models.framework import Framework
 from app.models.product import Product
 from app.models.submission import Submission
 from app.storage.blob_storage import get_signed_url
+
+
+def _uploaded_blob_names() -> set[str]:
+    """The names of every blob currently sitting in the test container —
+    used to assert an upload really did or did not survive a request, by
+    diffing this set before and after, rather than trusting that
+    `create_evidence` called `delete_file`."""
+    container = BlobServiceClient.from_connection_string(
+        settings.AZURE_STORAGE_CONNECTION_STRING
+    ).get_container_client(settings.AZURE_STORAGE_CONTAINER)
+    return {blob.name for blob in container.list_blobs()}
 
 
 def _make_control(db_session) -> Control:
@@ -108,3 +121,116 @@ def test_deleting_evidence_file_really_removes_it_from_storage(
 
     fetch_after = httpx.get(get_signed_url(evidence_file.file_name))
     assert fetch_after.status_code == 404
+
+
+def _fail_partway(monkeypatch) -> None:
+    """Make the write blow up after the upload has happened and the Evidence
+    and its Evidence File are already in the transaction — the exact window
+    that used to leave a half-built record behind.
+
+    Monkeypatching stands in for a database going away mid-write, which can't
+    be provoked on demand against a real Postgres. It patches the route's own
+    reference, so it adds no seam to production code. It deliberately does
+    *not* fake blob storage: the upload, the cleanup and the assertions below
+    all run against the real emulator.
+    """
+    def _boom(*args, **kwargs):
+        raise RuntimeError("database went away mid-write")
+
+    monkeypatch.setattr("app.api.routes.evidence.Submission", _boom)
+
+
+def test_create_evidence_with_an_unknown_control_is_a_bad_request_not_a_server_error(
+    db_session, engineer_client
+):
+    """Naming a Control that doesn't exist is the caller's mistake, so it must
+    come back as not-found. Left to the foreign key it would surface as a 500
+    inviting a retry that can never succeed.
+
+    The parent is also resolved before the upload, so a doomed request never
+    puts a blob into storage that would then need cleaning up.
+    """
+    blobs_before = _uploaded_blob_names()
+
+    response = engineer_client.post(
+        "/api/evidence",
+        data={"title": "Console screenshot", "control_id": "999999999"},
+        files={"file": ("screenshot.png", b"never uploaded", "image/png")},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Control not found"
+
+    assert db_session.query(Evidence).count() == 0
+    assert _uploaded_blob_names() == blobs_before
+
+
+def test_evidence_creation_leaves_nothing_behind_when_the_write_fails(
+    db_session, engineer_client, monkeypatch
+):
+    """A partial failure must leave the database and storage exactly as if
+    the request had never been made.
+
+    Asserts only observable state: no Evidence, Evidence File or Submission
+    row survives, and the blob uploaded before the failing write does not
+    survive either — diffed against the container's real contents, never
+    "delete_file was called".
+    """
+    control = _make_control(db_session)
+    blobs_before = _uploaded_blob_names()
+    _fail_partway(monkeypatch)
+
+    response = engineer_client.post(
+        "/api/evidence",
+        data={"title": "Console screenshot", "control_id": str(control.id)},
+        files={"file": ("screenshot.png", b"orphan bait", "image/png")},
+    )
+
+    assert response.status_code == 500
+
+    assert db_session.query(Evidence).count() == 0
+    assert db_session.query(EvidenceFile).count() == 0
+    assert db_session.query(Submission).count() == 0
+
+    assert _uploaded_blob_names() == blobs_before
+
+
+def test_retry_after_a_failed_creation_produces_exactly_one_record(
+    db_session, engineer_client, monkeypatch
+):
+    """A retry after a failure must not compete with debris from the first
+    attempt: exactly one complete Evidence/Evidence File/Submission, and a
+    file that really is fetchable — not one complete record and one broken."""
+    control = _make_control(db_session)
+
+    with monkeypatch.context() as failing:
+        _fail_partway(failing)
+        failed_response = engineer_client.post(
+            "/api/evidence",
+            data={"title": "Console screenshot", "control_id": str(control.id)},
+            files={"file": ("screenshot.png", b"first attempt, fails", "image/png")},
+        )
+    assert failed_response.status_code == 500
+
+    retry_response = engineer_client.post(
+        "/api/evidence",
+        data={"title": "Console screenshot", "control_id": str(control.id)},
+        files={"file": ("screenshot.png", b"second attempt, succeeds", "image/png")},
+    )
+    assert retry_response.status_code == 201
+
+    assert db_session.query(Evidence).count() == 1
+    assert db_session.query(EvidenceFile).count() == 1
+    assert db_session.query(Submission).count() == 1
+
+    fetch = httpx.get(retry_response.json()["file_url"])
+    assert fetch.status_code == 200
+    assert fetch.content == b"second attempt, succeeds"
+
+    assert db_session.query(Evidence).count() == 1
+    assert db_session.query(EvidenceFile).count() == 1
+    assert db_session.query(Submission).count() == 1
+
+    fetch = httpx.get(retry_response.json()["file_url"])
+    assert fetch.status_code == 200
+    assert fetch.content == b"second attempt, succeeds"

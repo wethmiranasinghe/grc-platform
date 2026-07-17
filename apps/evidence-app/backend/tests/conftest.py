@@ -275,9 +275,9 @@ def db_session(db_engine):
     The session is bound to a connection holding an outer transaction plus a
     SAVEPOINT, and both are rolled back at teardown — so nothing a test does
     is ever visible to another test, even though route handlers call
-    `db.commit()` themselves (some, like evidence creation, call it more than
-    once per request). This is the standard SQLAlchemy pattern for joining a
-    Session to an external transaction in a test suite.
+    `db.commit()` themselves (some, like deleting the last Evidence File,
+    call it more than once per request). This is the standard SQLAlchemy
+    pattern for joining a Session to an external transaction in a test suite.
     """
     connection = db_engine.connect()
     outer_transaction = connection.begin()

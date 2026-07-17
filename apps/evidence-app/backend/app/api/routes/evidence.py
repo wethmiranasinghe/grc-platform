@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 from app.auth import User, get_current_user
 from app.database import get_db
+from app.models.control import Control
 from app.models.evidence import Evidence
 from app.models.evidence_file import EvidenceFile
 from app.models.submission import Submission
@@ -49,31 +50,57 @@ def create_evidence(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    # Resolve the parent Control before uploading anything. Naming a Control
+    # that doesn't exist is a bad request, not a server failure: letting it
+    # fall through to the foreign key would surface as a 500 telling the
+    # caller to retry, which can never succeed. Doing this first also means a
+    # doomed request never uploads a blob that would then need cleaning up.
+    if db.query(Control).filter(Control.id == control_id).first() is None:
+        raise HTTPException(status_code=404, detail="Control not found")
+
     file_name, file_url = save_file(file)
-    evidence = Evidence(
-        title=title,
-        description=description,
-        file_name=file_name,
-        file_url=file_url,
-        control_id=control_id,
-        created_by=user.email,
-    )
-    db.add(evidence)
-    db.commit()
+    try:
+        evidence = Evidence(
+            title=title,
+            description=description,
+            file_name=file_name,
+            file_url=file_url,
+            control_id=control_id,
+            created_by=user.email,
+        )
+        db.add(evidence)
+        # Flush (not commit) to assign evidence.id, so the EvidenceFile and
+        # Submission below can reference it while all three rows still live
+        # in the same uncommitted transaction.
+        db.flush()
+
+        db.add(EvidenceFile(
+            evidence_id=evidence.id,
+            file_name=file_name,
+            file_url=file_url,
+            sort_order=0,
+        ))
+        db.add(Submission(
+            evidence_id=evidence.id,
+            submitted_by=user.email,
+            status="pending",
+            notes=f"Manual upload via Submit page. {description or ''}".strip(),
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
+        # The upload happens before the transaction and isn't something the
+        # database can roll back, so a failed write would otherwise strand
+        # the blob we just uploaded with nothing left to reference it. Clean
+        # it up explicitly so a failed submission leaves nothing behind in
+        # storage either, not just in the database.
+        delete_file(file_name)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create evidence. Please try again.",
+        )
+
     db.refresh(evidence)
-
-    db.add(EvidenceFile(evidence_id=evidence.id, file_name=file_name, file_url=file_url, sort_order=0))
-    db.commit()
-
-    submission = Submission(
-        evidence_id=evidence.id,
-        submitted_by=user.email,
-        status="pending",
-        notes=f"Manual upload via Submit page. {description or ''}".strip(),
-    )
-    db.add(submission)
-    db.commit()
-
     return evidence
 
 
