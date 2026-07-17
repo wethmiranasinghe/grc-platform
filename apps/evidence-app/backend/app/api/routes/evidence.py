@@ -17,6 +17,21 @@ class _EvidenceUpdate(BaseModel):
     description: str
 
 
+def _authorize_evidence_access(evidence: Evidence | None, user: User) -> None:
+    """Shared owner-or-admin check for evidence-linked reads: only the
+    Evidence's owner or an Admin may access it.
+
+    Also owns the "evidence is missing" case, so callers that only have an
+    Evidence id to resolve (e.g. app.api.routes.submissions, resolving a
+    Submission's evidence_id) get a 404 rather than treating a dangling
+    reference as a 403.
+    """
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    if user.role != "admin" and evidence.created_by != user.email:
+        raise HTTPException(status_code=403)
+
+
 @router.get("", response_model=list[EvidenceResponse])
 def list_evidence(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     q = db.query(Evidence).options(selectinload(Evidence.files))
@@ -83,10 +98,7 @@ def delete_evidence_file(file_id: int, db: Session = Depends(get_db), user: User
 @router.get("/{evidence_id}", response_model=EvidenceResponse)
 def get_evidence(evidence_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     evidence = db.query(Evidence).options(selectinload(Evidence.files)).filter(Evidence.id == evidence_id).first()
-    if not evidence:
-        raise HTTPException(status_code=404, detail="Evidence not found")
-    if user.role != "admin" and evidence.created_by != user.email:
-        raise HTTPException(status_code=403, detail="Not authorized to view this evidence")
+    _authorize_evidence_access(evidence, user)
     return evidence
 
 
@@ -98,10 +110,7 @@ def update_evidence(evidence_id: int, body: _EvidenceUpdate, db: Session = Depen
         .filter(Evidence.id == evidence_id)
         .first()
     )
-    if not evidence:
-        raise HTTPException(status_code=404, detail="Evidence not found")
-    if user.role != "admin" and evidence.created_by != user.email:
-        raise HTTPException(status_code=403, detail="Not authorized to edit this evidence")
+    _authorize_evidence_access(evidence, user)
     evidence.description = body.description
     db.commit()
     db.refresh(evidence)

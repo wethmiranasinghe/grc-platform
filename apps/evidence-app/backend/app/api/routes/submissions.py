@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from app.api.routes.evidence import _authorize_evidence_access
 from app.auth import User, get_current_user
 from app.database import get_db
 from app.models.evidence import Evidence
@@ -39,8 +40,7 @@ def get_submission(submission_id: int, db: Session = Depends(get_db), user: User
         raise HTTPException(status_code=404, detail="Submission not found")
     if user.role != "admin":
         evidence = db.query(Evidence).filter(Evidence.id == submission.evidence_id).first()
-        if not evidence or evidence.created_by != user.email:
-            raise HTTPException(status_code=403, detail="Not authorized to view this submission")
+        _authorize_evidence_access(evidence, user)
     return submission
 
 
@@ -56,11 +56,7 @@ def update_submission_status(
         raise HTTPException(status_code=404, detail="Submission not found")
     if user.role != "admin":
         evidence = db.query(Evidence).filter(Evidence.id == submission.evidence_id).first()
-        if not evidence or evidence.created_by != user.email:
-            raise HTTPException(
-                status_code=403,
-                detail="You can only approve/reject submissions for evidence you captured yourself",
-            )
+        _authorize_evidence_access(evidence, user)
     if payload.status not in VALID_STATUSES:
         raise HTTPException(status_code=400, detail=f"Status must be one of: {', '.join(sorted(VALID_STATUSES))}")
     submission.status = payload.status
