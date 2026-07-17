@@ -30,6 +30,5 @@ type Deps struct {
 
 // RegisterRoutes mounts shared user routes onto mux.
 func RegisterRoutes(mux *http.ServeMux, deps Deps) {
-	mux.HandleFunc("GET /api/v1/me/permissions", handleGetMyPermissions)
 	mux.HandleFunc("GET /api/v1/users", handleListUsers(deps.Users))
 }

@@ -37,14 +37,6 @@ func FromContext(ctx context.Context) *UserInfo {
 	return middleware.UserInfoFromContext(ctx)
 }
 
-// privilegeEnforcementEnabled gates all RequirePrivilege checks.
-//
-// TEMPORARY: set to false so the whole API is accessible while roles and
-// privileges are still being seeded in the database. Flip back to true once
-// seed.sql (role, privilege, role_privilege) is loaded and the Asgardeo group
-// names match role.role_name — then access is enforced against the DB mapping.
-const privilegeEnforcementEnabled = true
-
 // HasPrivilege returns true if the user holds the given privilege.
 //
 // When no privilege store was configured (TokenValidatorEnabled=false local dev),
@@ -54,10 +46,6 @@ func HasPrivilege(ctx context.Context, priv string) bool {
 	// If the Auth middleware wasn't applied, fail closed.
 	if middleware.UserInfoFromContext(ctx) == nil {
 		return false
-	}
-	if !privilegeEnforcementEnabled {
-		// TEMPORARY allow-all — see privilegeEnforcementEnabled above.
-		return true
 	}
 	privs := privilege.FromContext(ctx)
 	if privs == nil {
@@ -76,6 +64,29 @@ func HasPrivilege(ctx context.Context, priv string) bool {
 func RequirePrivilege(ctx context.Context, w http.ResponseWriter, priv string) bool {
 	if HasPrivilege(ctx, priv) {
 		return true
+	}
+
+	response.WriteError(
+		w,
+		http.StatusForbidden,
+		response.ErrMsgForbidden,
+	)
+
+	return false
+}
+
+// RequireAnyPrivilege writes a 403 JSON response and returns false when the
+// user holds none of the given privileges. Use it for dual-audience routes
+// (e.g. an advisory hint visible to both submitters and reviewers):
+//
+//	if !auth.RequireAnyPrivilege(r.Context(), w, privilege.SubmitEvidence, privilege.ReviewEvidence) {
+//	    return
+//	}
+func RequireAnyPrivilege(ctx context.Context, w http.ResponseWriter, privs ...string) bool {
+	for _, p := range privs {
+		if HasPrivilege(ctx, p) {
+			return true
+		}
 	}
 
 	response.WriteError(

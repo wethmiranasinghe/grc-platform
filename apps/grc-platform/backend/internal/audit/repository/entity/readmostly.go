@@ -61,6 +61,9 @@ func (r *frameworkRepo) List(ctx context.Context) ([]*model.AuditFramework, erro
 func (r *frameworkRepo) GetByID(ctx context.Context, id int) (*model.AuditFramework, error) {
 	var fw model.AuditFramework
 	if err := r.c.Get(ctx, fmt.Sprintf("/audit/frameworks/%d", id), &fw); err != nil {
+		if notFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return &fw, nil
@@ -103,6 +106,9 @@ func (r *productRepo) List(ctx context.Context) ([]*model.AuditProduct, error) {
 func (r *productRepo) GetByID(ctx context.Context, id int) (*model.AuditProduct, error) {
 	var p model.AuditProduct
 	if err := r.c.Get(ctx, fmt.Sprintf("/audit/products/%d", id), &p); err != nil {
+		if notFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return &p, nil
