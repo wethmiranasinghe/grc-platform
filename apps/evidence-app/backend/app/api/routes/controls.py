@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.auth import User, get_current_user
 from app.database import get_db
 from app.models.control import Control
+from app.models.framework import Framework
 from app.rbac import require_admin
 from app.schemas.control import ControlCreate, ControlResponse, ControlUpdate
 from app.storage.blob_storage import delete_file
@@ -24,6 +25,12 @@ def list_controls(
 
 @router.post("", response_model=ControlResponse, status_code=201)
 def create_control(payload: ControlCreate, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    # Resolve the parent Framework before inserting. Naming a Framework that
+    # doesn't exist is a bad request, not a server failure: left to the
+    # foreign key it would surface as a raw IntegrityError, i.e. a 500.
+    # Matches create_framework's own check on its parent Product.
+    if db.query(Framework).filter(Framework.id == payload.framework_id).first() is None:
+        raise HTTPException(status_code=404, detail="Framework not found")
     control = Control(**payload.model_dump())
     db.add(control)
     db.commit()
