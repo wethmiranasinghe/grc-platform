@@ -21,6 +21,10 @@ class EvidenceFileOut(BaseModel):
         return self
 
 
+class EvidenceUpdate(BaseModel):
+    description: str
+
+
 class EvidenceResponse(BaseModel):
     id: int
     title: str

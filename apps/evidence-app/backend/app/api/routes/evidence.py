@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 from app.auth import User, get_current_user
 from app.database import get_db
@@ -8,14 +7,10 @@ from app.models.evidence import Evidence
 from app.models.evidence_file import EvidenceFile
 from app.models.submission import Submission
 from app.rbac import require_admin
-from app.schemas.evidence import EvidenceResponse
+from app.schemas.evidence import EvidenceResponse, EvidenceUpdate
 from app.storage.blob_storage import save_file, delete_file
 
 router = APIRouter(prefix="/evidence", tags=["Evidence"])
-
-
-class _EvidenceUpdate(BaseModel):
-    description: str
 
 
 def _authorize_evidence_access(evidence: Evidence | None, user: User) -> None:
@@ -167,7 +162,7 @@ def get_evidence(evidence_id: int, db: Session = Depends(get_db), user: User = D
 
 
 @router.patch("/{evidence_id}", response_model=EvidenceResponse)
-def update_evidence(evidence_id: int, body: _EvidenceUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def update_evidence(evidence_id: int, body: EvidenceUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     evidence = (
         db.query(Evidence)
         .options(selectinload(Evidence.files))
