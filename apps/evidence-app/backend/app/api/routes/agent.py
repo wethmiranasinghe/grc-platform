@@ -26,14 +26,52 @@ _last_poll: dict[str, datetime] = {}
 # Per-task SSE pub/sub: task_id → set of asyncio.Queue objects (one per browser tab)
 _sse_listeners: dict[int, set] = {}
 
+# The event loop `stream_task`'s asyncio.Queue objects belong to. Captured
+# once, from app/main.py's startup hook, while that loop is running — see
+# `set_event_loop` below. Every other handler in this module is a plain
+# `def`, which FastAPI runs in its threadpool, so `_sse_publish` can be
+# called from a worker thread and needs this to hand work back to the loop.
+_event_loop: asyncio.AbstractEventLoop | None = None
+
+
+def set_event_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Record the running event loop so `_sse_publish` can safely reach it
+    from other threads. Call once, from a startup/lifespan hook, via
+    `asyncio.get_running_loop()` — never from a worker thread."""
+    global _event_loop
+    _event_loop = loop
+
 
 def _sse_publish(task_id: int, payload: str) -> None:
-    """Push a serialised TaskOut JSON string to every SSE client watching this task."""
-    for q in list(_sse_listeners.get(task_id, set())):
-        try:
-            q.put_nowait(payload)
-        except asyncio.QueueFull:
-            pass  # slow client — drop rather than block
+    """Push a serialised TaskOut JSON string to every SSE client watching this
+    task.
+
+    `runner_progress` and `runner_result` — the only two callers — are plain
+    `def` handlers, so FastAPI runs them in its threadpool; this can therefore
+    run on a worker thread, not the event loop. asyncio.Queue.put_nowait is
+    not thread-safe, so the actual queue writes must happen on the loop
+    thread. `loop.call_soon_threadsafe` is itself safe to call from any
+    thread — including the loop's own — so this single code path works
+    whether the caller happens to be on the loop or on a worker thread.
+    """
+    loop = _event_loop
+    if loop is None:
+        # The startup hook hasn't captured the loop yet (e.g. called during
+        # import, or before the app has finished starting). Nothing is
+        # listening yet either way, so drop rather than crash.
+        return
+
+    def _deliver() -> None:
+        for q in list(_sse_listeners.get(task_id, set())):
+            try:
+                q.put_nowait(payload)
+            except asyncio.QueueFull:
+                pass  # slow client — drop rather than block
+
+    try:
+        loop.call_soon_threadsafe(_deliver)
+    except RuntimeError:
+        pass  # loop already closed (e.g. shutting down) — nothing to do
 
 
 def _authorize_task_access(task: AgentTask, user: User) -> None:
@@ -44,7 +82,7 @@ def _authorize_task_access(task: AgentTask, user: User) -> None:
 
 
 @router.post("/tasks", response_model=TaskOut)
-async def create_task(
+def create_task(
     req: TaskCreate,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -69,7 +107,7 @@ async def create_task(
 
 
 @router.get("/tasks", response_model=list[TaskOut])
-async def list_tasks(
+def list_tasks(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     limit: int = 50,
@@ -81,14 +119,14 @@ async def list_tasks(
 
 
 @router.get("/runner-status")
-async def runner_status(user: User = Depends(get_current_user)):
+def runner_status(user: User = Depends(get_current_user)):
     last = _last_poll.get(user.email)
     online = last is not None and (datetime.now(timezone.utc) - last).total_seconds() < 60
     return {"online": online, "last_seen": last.isoformat() if last else None}
 
 
 @router.post("/heartbeat")
-async def runner_heartbeat(
+def runner_heartbeat(
     task_id: int | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -113,7 +151,7 @@ async def runner_heartbeat(
 # IMPORTANT: /tasks/next must be defined BEFORE /tasks/{task_id} so FastAPI
 # matches the literal path "next" before trying to cast it to int.
 @router.get("/tasks/next", response_model=TaskOut | None)
-async def runner_next_task(
+def runner_next_task(
     runner_id: str = Query(...),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -138,7 +176,7 @@ async def runner_next_task(
 
 
 @router.get("/tasks/{task_id}", response_model=TaskOut)
-async def get_task(
+def get_task(
     task_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -212,7 +250,7 @@ async def stream_task(
 
 
 @router.post("/tasks/{task_id}/cancel")
-async def cancel_task(
+def cancel_task(
     task_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -229,7 +267,7 @@ async def cancel_task(
 
 
 @router.post("/tasks/{task_id}/resume")
-async def resume_task(
+def resume_task(
     task_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -250,7 +288,7 @@ async def resume_task(
 
 
 @router.post("/tasks/{task_id}/pause-poll")
-async def runner_pause_poll(
+def runner_pause_poll(
     task_id: int,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -274,7 +312,7 @@ async def runner_pause_poll(
 
 
 @router.post("/tasks/{task_id}/progress")
-async def runner_progress(
+def runner_progress(
     task_id: int,
     payload: TaskProgress,
     user: User = Depends(get_current_user),
@@ -295,7 +333,7 @@ async def runner_progress(
 
 
 @router.post("/tasks/{task_id}/result")
-async def runner_result(
+def runner_result(
     task_id: int,
     result: TaskResult,
     user: User = Depends(get_current_user),
@@ -368,7 +406,7 @@ async def runner_result(
 
 
 @router.post("/upload-screenshot")
-async def upload_screenshot(
+def upload_screenshot(
     file: UploadFile,
     user: User = Depends(get_current_user),
 ):

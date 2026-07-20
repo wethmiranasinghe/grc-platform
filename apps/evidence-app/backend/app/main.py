@@ -1,10 +1,29 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import products, frameworks, controls, evidence, submissions, agent, usage, me
 from app.config import settings
 
-app = FastAPI(title="Compliance Evidence Portal", version="1.0.0", redirect_slashes=False)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # agent.py's SSE handlers (runner_progress/runner_result) run in
+    # FastAPI's threadpool and need a reference to this loop to safely hand
+    # updates back to the asyncio.Queue objects that stream_task awaits on.
+    # Captured here, while the loop is running, per app.api.routes.agent.
+    agent.set_event_loop(asyncio.get_running_loop())
+    yield
+
+
+app = FastAPI(
+    title="Compliance Evidence Portal",
+    version="1.0.0",
+    redirect_slashes=False,
+    lifespan=lifespan,
+)
 
 cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
 
