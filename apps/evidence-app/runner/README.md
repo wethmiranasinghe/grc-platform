@@ -14,6 +14,10 @@ drives cloud consoles, captures evidence screenshots, and posts results back.
 
 ## Install
 
+> **Note:** the packaging/distribution approach is not finalised yet (a pre-built
+> binary bundle is under consideration). `install.sh` is the current dev/local
+> install path and may be replaced.
+
 ```bash
 bash install.sh          # creates ~/.wso2-runner/venv, installs the CLI + Chromium
 wso2-runner configure    # interactive setup — writes ~/.wso2-runner/.env

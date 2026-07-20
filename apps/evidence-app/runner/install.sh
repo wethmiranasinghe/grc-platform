@@ -1,6 +1,10 @@
 #!/bin/bash
 # WSO2 Compliance Runner — one-command installer
 # Usage: bash install.sh
+#
+# NOTE: provisional. The packaging/distribution approach for the runner is not
+# finalised yet (a pre-built binary bundle is under consideration), so this
+# script may be replaced. Treat it as the current dev/local install path.
 
 set -e
 
@@ -53,5 +57,7 @@ echo "Next step — run the setup wizard:"
 echo ""
 echo "  wso2-runner configure"
 echo ""
-echo "  (If 'wso2-runner' is not found, run: source ~/.local/bin/wso2-runner)"
+echo "  (If 'wso2-runner' is not found, add ~/.local/bin to your PATH:"
+echo "     export PATH=\"\$HOME/.local/bin:\$PATH\"   — then re-open your terminal,"
+echo "     or add that line to your ~/.bashrc to make it permanent.)"
 echo ""
