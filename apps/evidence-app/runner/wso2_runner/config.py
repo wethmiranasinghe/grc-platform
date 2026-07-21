@@ -19,7 +19,9 @@ class RunnerSettings(BaseSettings):
     USER_EMAIL: str = ""
 
     # Asgardeo tenant/org — same tenant as the web frontend and backend.
-    ASGARDEO_ORG: str = "gvgj"
+    # Required, no default: a runner that forgets to set it should fail loudly
+    # at startup rather than silently authenticate against the wrong tenant.
+    ASGARDEO_ORG: str
     # Client ID of the Runner's own Asgardeo "Native Application" (public
     # client, PKCE, no secret) — separate from the web frontend's client ID.
     # Set this after registering it in the Asgardeo console (see setup docs).

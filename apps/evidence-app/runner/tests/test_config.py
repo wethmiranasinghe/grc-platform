@@ -11,15 +11,17 @@ developer's machine; only the process environment (which monkeypatch
 controls) is read.
 """
 import pytest
+from pydantic import ValidationError
 
 from wso2_runner.config import RunnerSettings
 
 # Fields the default-test asserts on; cleared from the process env so a stray
-# export on the machine cannot mask the real default.
+# export on the machine cannot mask the real default. ASGARDEO_ORG is not here:
+# it is required with no default, so it is set (not asserted) so construction
+# succeeds, and its own missing-case test lives below.
 _ASSERTED_DEFAULTS = [
     "CLOUD_URL",
     "USER_EMAIL",
-    "ASGARDEO_ORG",
     "ASGARDEO_CLIENT_ID",
     "POLL_INTERVAL",
     "SCREENSHOT_MONITOR",
@@ -29,15 +31,26 @@ _ASSERTED_DEFAULTS = [
 def test_defaults_when_no_env_or_file(monkeypatch):
     for key in _ASSERTED_DEFAULTS:
         monkeypatch.delenv(key, raising=False)
+    # Required field, so it must be present for construction to succeed; its
+    # value is asserted by test_env_var_overrides_default, not here.
+    monkeypatch.setenv("ASGARDEO_ORG", "test-org")
 
     s = RunnerSettings(_env_file=None)
 
     assert s.CLOUD_URL == "http://localhost:8000"
     assert s.USER_EMAIL == ""
-    assert s.ASGARDEO_ORG == "gvgj"
     assert s.ASGARDEO_CLIENT_ID == ""
     assert s.POLL_INTERVAL == 2.0
     assert s.SCREENSHOT_MONITOR == 1
+
+
+def test_raises_when_asgardeo_org_is_missing(monkeypatch):
+    # Required, no default: a runner that forgets to set the org should fail
+    # loudly at startup rather than authenticate against the wrong tenant.
+    monkeypatch.delenv("ASGARDEO_ORG", raising=False)
+
+    with pytest.raises(ValidationError, match="ASGARDEO_ORG"):
+        RunnerSettings(_env_file=None)
 
 
 def test_env_var_overrides_default(monkeypatch):
