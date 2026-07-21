@@ -20,7 +20,7 @@ malformed or absent input must return None rather than raise.
 import base64
 import json
 
-from wso2_runner.oauth import _email_from_id_token
+from wso2_runner.oauth import _email_from_id_token, _state_matches
 
 
 def _make_id_token(payload: dict) -> str:
@@ -76,3 +76,29 @@ def test_returns_none_for_malformed_id_token():
 
 def test_returns_none_when_no_id_token_present():
     assert _email_from_id_token({}) is None
+
+
+# Unit tests for `wso2_runner.oauth._state_matches`.
+#
+# Exercises the CSRF `state` comparison the login callback uses to decide
+# whether a redirect back from Asgardeo is legitimate — purely through its
+# external contract (expected state in, bool out), without spinning up the
+# loopback HTTP server or a browser.
+
+
+def test_state_matches_returns_true_for_matching_state():
+    assert _state_matches("abc123", "abc123") is True
+
+
+def test_state_matches_returns_false_for_different_state():
+    assert _state_matches("abc123", "xyz789") is False
+
+
+def test_state_matches_returns_false_when_returned_state_is_none():
+    # The callback never received a `state` query parameter at all —
+    # e.g. an attacker driving the browser straight to our redirect URI.
+    assert _state_matches("abc123", None) is False
+
+
+def test_state_matches_returns_false_for_empty_string_state():
+    assert _state_matches("abc123", "") is False

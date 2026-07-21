@@ -53,6 +53,7 @@ class _CallbackHandler(http.server.BaseHTTPRequestHandler):
         self.server.auth_error = params.get(  # type: ignore[attr-defined]
             "error_description", params.get("error", [None])
         )[0]
+        self.server.auth_state = params.get("state", [None])[0]  # type: ignore[attr-defined]
 
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
@@ -72,6 +73,11 @@ class _CallbackHandler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args) -> None:  # noqa: A002
         pass  # silence default per-request stderr logging
+
+
+def _state_matches(expected: str, returned: str | None) -> bool:
+    """True only when the callback actually echoed back our CSRF `state`."""
+    return returned is not None and returned != "" and returned == expected
 
 
 def _pkce_pair() -> tuple[str, str]:
@@ -123,6 +129,7 @@ def _login_interactive(org: str, client_id: str, login_hint: str | None) -> dict
     server = http.server.HTTPServer(("localhost", CALLBACK_PORT), _CallbackHandler)
     server.auth_code = None  # type: ignore[attr-defined]
     server.auth_error = None  # type: ignore[attr-defined]
+    server.auth_state = None  # type: ignore[attr-defined]
     thread = threading.Thread(target=server.handle_request, daemon=True)
     thread.start()
 
@@ -140,6 +147,8 @@ def _login_interactive(org: str, client_id: str, login_hint: str | None) -> dict
         raise RuntimeError(
             "Timed out waiting for Asgardeo login (180s). Run the command again."
         )
+    if not _state_matches(state, server.auth_state):  # type: ignore[attr-defined]
+        raise RuntimeError("Asgardeo login failed: state mismatch (possible CSRF attempt).")
 
     resp = httpx.post(
         f"https://api.asgardeo.io/t/{org}/oauth2/token",
