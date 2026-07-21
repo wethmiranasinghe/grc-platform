@@ -61,15 +61,21 @@ const riskSelectCols = `
   r.git_issue_url, r.email_subject, r.remarks,
   r.risk_type, r.rejection_comment, r.rejection_stage,
   DATE_FORMAT(r.owner_first_approved_at, '%Y-%m-%d'),
-  r.created_by, r.updated_by`
+  r.created_by, r.updated_by,
+  eff.risk_level AS effective_risk_level, eff.color_code AS effective_color_code`
 
+// riskFromClause uses LEFT JOINs throughout. A risk whose register, owner or
+// assigner row has gone missing is a data problem, but it must still be
+// listable and readable — an inner join would silently drop it from every
+// result, which is far harder to notice than a blank name. The GRC backend's
+// own list query left-joins for the same reason.
 const riskFromClause = `
 FROM risk r
-JOIN  risk_team  src   ON src.id   = r.source_register_id
-JOIN  risk_team  asgn  ON asgn.id  = r.assignment_team_id
-JOIN  ` + "`user`" + ` u_asgn ON u_asgn.id = r.assigner_id
-JOIN  ` + "`user`" + ` u_own  ON u_own.id  = r.owner_id
-LEFT JOIN risk_score rs ON rs.id   = r.gross_score_id`
+LEFT JOIN risk_team  src   ON src.id   = r.source_register_id
+LEFT JOIN risk_team  asgn  ON asgn.id  = r.assignment_team_id
+LEFT JOIN ` + "`user`" + ` u_asgn ON u_asgn.id = r.assigner_id
+LEFT JOIN ` + "`user`" + ` u_own  ON u_own.id  = r.owner_id
+LEFT JOIN risk_score rs ON rs.id   = r.gross_score_id` + effectiveScoreJoin
 
 func (r *riskRepo) SearchRisks(ctx context.Context, req domain.SearchRisksRequest) ([]domain.Risk, int, error) {
 	args := []any{}
@@ -119,6 +125,54 @@ func (r *riskRepo) SearchRisks(ctx context.Context, req domain.SearchRisksReques
 		for _, q := range req.RiskQuarterKeys {
 			args = append(args, q)
 		}
+	}
+
+	if len(req.RiskLevelKeys) > 0 {
+		ph := strings.Repeat("?,", len(req.RiskLevelKeys))
+		ph = ph[:len(ph)-1]
+		// eff, not rs: filter on the level the row actually shows.
+		where += " AND eff.risk_level IN (" + ph + ")"
+		for _, l := range req.RiskLevelKeys {
+			args = append(args, l)
+		}
+	}
+	if len(req.RiskTypeKeys) > 0 {
+		ph := strings.Repeat("?,", len(req.RiskTypeKeys))
+		ph = ph[:len(ph)-1]
+		where += " AND r.risk_type IN (" + ph + ")"
+		for _, t := range req.RiskTypeKeys {
+			args = append(args, t)
+		}
+	}
+	if len(req.OwnerIDs) > 0 {
+		ph := strings.Repeat("?,", len(req.OwnerIDs))
+		ph = ph[:len(ph)-1]
+		where += " AND r.owner_id IN (" + ph + ")"
+		for _, id := range req.OwnerIDs {
+			args = append(args, id)
+		}
+	}
+	// created_at is a datetime, so the bounds are widened to whole days;
+	// otherwise "submitted up to the 5th" would exclude everything after
+	// midnight on the 5th.
+	if req.SubmittedFrom != "" {
+		where += " AND r.created_at >= ?"
+		args = append(args, req.SubmittedFrom+" 00:00:00")
+	}
+	if req.SubmittedTo != "" {
+		where += " AND r.created_at <= ?"
+		args = append(args, req.SubmittedTo+" 23:59:59")
+	}
+	if req.DueFrom != "" {
+		where += " AND r.implementation_date >= ?"
+		args = append(args, req.DueFrom)
+	}
+	if req.DueTo != "" {
+		where += " AND r.implementation_date <= ?"
+		args = append(args, req.DueTo)
+	}
+	if req.DueOverdueOnly {
+		where += " AND r.implementation_date IS NOT NULL AND r.implementation_date < CURDATE()"
 	}
 
 	var total int
@@ -572,6 +626,7 @@ func scanRiskWithExtras(s scanner, extras ...any) (*domain.Risk, error) {
 	var impactDesc, progress, complianceApprovalDate sql.NullString
 	var gitIssueURL, emailSubject, remarks sql.NullString
 	var rejectionComment, rejectionStage, ownerFirstApprovedAt sql.NullString
+	var effLevel, effColour sql.NullString
 	var grossScoreID, actionPlanID, complianceApprovalBy sql.NullInt64
 
 	dest := []any{
@@ -591,6 +646,7 @@ func scanRiskWithExtras(s scanner, extras ...any) (*domain.Risk, error) {
 		&r.RiskType, &rejectionComment, &rejectionStage,
 		&ownerFirstApprovedAt,
 		&r.CreatedBy, &r.UpdatedBy,
+		&effLevel, &effColour,
 	}
 	if err := s.Scan(append(dest, extras...)...); err != nil {
 		return nil, err
@@ -629,6 +685,8 @@ func scanRiskWithExtras(s scanner, extras ...any) (*domain.Risk, error) {
 	r.GrossScoreID = nullInt(grossScoreID)
 	r.ActionPlanID = nullInt(actionPlanID)
 	r.ComplianceApprovalBy = nullInt(complianceApprovalBy)
+	r.EffectiveRiskLevel = nullStr(effLevel)
+	r.EffectiveColorCode = nullStr(effColour)
 	return &r, nil
 }
 
@@ -693,7 +751,6 @@ func (r *riskRepo) GetRiskDetail(ctx context.Context, id int) (*domain.RiskDetai
 		       eff.id, eff.likelihood, eff.impact, eff.risk_rating, eff.risk_level, eff.color_code
 		`+riskFromClause+`
 		LEFT JOIN `+"`user`"+` ca ON ca.id = r.compliance_approval_by
-		`+effectiveScoreJoin+`
 		WHERE r.id = ?`, id)
 
 	risk, err := scanRiskWithExtras(row,

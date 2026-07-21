@@ -489,17 +489,43 @@ type Risk struct {
 	OwnerFirstApprovedAt   *string `json:"ownerFirstApprovedAt"`
 	CreatedBy              string  `json:"createdBy"`
 	UpdatedBy              string  `json:"updatedBy"`
+
+	// Effective residual standing: the most recent assessment's score, or the
+	// gross score when the risk has not been reassessed. This is what a risk
+	// row should display — GrossRiskLevel is the original rating and goes stale
+	// the moment a reassessment lands.
+	EffectiveRiskLevel *string `json:"effectiveRiskLevel"`
+	EffectiveColorCode *string `json:"effectiveColorCode"`
 }
 
 // SearchRisksRequest is the payload for POST /risks/search.
 type SearchRisksRequest struct {
-	SearchQuery        string     `json:"searchQuery"`
-	WorkflowStatusKeys []string   `json:"workflowStatusKeys"` // filter by status values
-	SourceRegisterIDs  []int      `json:"sourceRegisterIds"`
-	AssignmentTeamIDs  []int      `json:"assignmentTeamIds"`
-	RiskYears          []int      `json:"riskYears"`
-	RiskQuarterKeys    []string   `json:"riskQuarterKeys"` // Q1 | Q2 | Q3 | Q4
-	Pagination         Pagination `json:"pagination"`
+	SearchQuery        string   `json:"searchQuery"` // matched against risk_code and risk_title
+	WorkflowStatusKeys []string `json:"workflowStatusKeys"`
+	SourceRegisterIDs  []int    `json:"sourceRegisterIds"`
+	AssignmentTeamIDs  []int    `json:"assignmentTeamIds"`
+	RiskYears          []int    `json:"riskYears"`
+	RiskQuarterKeys    []string `json:"riskQuarterKeys"` // Q1 | Q2 | Q3 | Q4
+
+	// RiskLevelKeys filters on the *effective* residual level — the most recent
+	// assessment's level, or the gross level when a risk has not been
+	// reassessed. Filtering on the gross level would contradict what the same
+	// row displays.
+	RiskLevelKeys []string `json:"riskLevelKeys"` // LOW | MEDIUM | HIGH
+	RiskTypeKeys  []string `json:"riskTypeKeys"`  // NEW | UPDATED
+	OwnerIDs      []int    `json:"ownerIds"`
+
+	// Submitted* bound created_at, Due* bound implementation_date. Dates are
+	// YYYY-MM-DD and inclusive at both ends.
+	SubmittedFrom string `json:"submittedFrom"`
+	SubmittedTo   string `json:"submittedTo"`
+	DueFrom       string `json:"dueFrom"`
+	DueTo         string `json:"dueTo"`
+	// DueOverdueOnly restricts to risks already past their implementation date,
+	// independent of any Due range above.
+	DueOverdueOnly bool `json:"dueOverdueOnly"`
+
+	Pagination Pagination `json:"pagination"`
 }
 
 // SearchRisksResponse is returned by POST /risks/search.

@@ -19,6 +19,7 @@ package service
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/apierror"
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/domain"
@@ -136,6 +137,11 @@ func isValidRiskTransition(from, to string) bool {
 var validTreatmentStrategies = map[string]bool{"REMEDIATE": true, "ACCEPT": true, "TRANSFER": true, "VOID": true}
 var validIdentifiedByTypes = map[string]bool{"EMPLOYEE": true, "EXTERNAL_PERSON": true, "TOOL": true}
 
+// validRiskLevels mirrors the distinct risk_score.risk_level values;
+// validRiskTypes mirrors the risk.risk_type ENUM.
+var validRiskLevels = map[string]bool{"LOW": true, "MEDIUM": true, "HIGH": true}
+var validRiskTypes = map[string]bool{"NEW": true, "UPDATED": true}
+
 func (s *riskService) SearchRisks(ctx context.Context, req domain.SearchRisksRequest) (domain.SearchRisksResponse, error) {
 	for i, sk := range req.WorkflowStatusKeys {
 		if !validRiskStatuses[strings.ToUpper(sk)] {
@@ -149,6 +155,32 @@ func (s *riskService) SearchRisks(ctx context.Context, req domain.SearchRisksReq
 		}
 		req.RiskQuarterKeys[i] = strings.ToUpper(qk)
 	}
+	for i, lk := range req.RiskLevelKeys {
+		up := strings.ToUpper(lk)
+		if !validRiskLevels[up] {
+			return domain.SearchRisksResponse{}, &apierror.ValidationError{Msg: "invalid riskLevelKey: " + lk + " (must be LOW, MEDIUM, or HIGH)"}
+		}
+		req.RiskLevelKeys[i] = up
+	}
+	for i, tk := range req.RiskTypeKeys {
+		up := strings.ToUpper(tk)
+		if !validRiskTypes[up] {
+			return domain.SearchRisksResponse{}, &apierror.ValidationError{Msg: "invalid riskTypeKey: " + tk + " (must be NEW or UPDATED)"}
+		}
+		req.RiskTypeKeys[i] = up
+	}
+	for _, d := range []struct{ name, value string }{
+		{"submittedFrom", req.SubmittedFrom}, {"submittedTo", req.SubmittedTo},
+		{"dueFrom", req.DueFrom}, {"dueTo", req.DueTo},
+	} {
+		if d.value == "" {
+			continue
+		}
+		if _, err := time.Parse("2006-01-02", d.value); err != nil {
+			return domain.SearchRisksResponse{}, &apierror.ValidationError{Msg: d.name + " must be a date in YYYY-MM-DD format"}
+		}
+	}
+
 	normalizePagination(&req.Pagination)
 	risks, total, err := s.repo.SearchRisks(ctx, req)
 	if err != nil {
