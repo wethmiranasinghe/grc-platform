@@ -61,6 +61,7 @@ func NewRouter(db *sql.DB, store *storage.Service) http.Handler {
 	riskEvidenceRepo := repository.NewRiskEvidenceRepository(db)
 	riskAssessmentRepo := repository.NewRiskAssessmentRepository(db)
 	riskDashboardRepo := repository.NewRiskDashboardRepository(db)
+	riskAnalyticsRepo := repository.NewRiskAnalyticsRepository(db)
 
 	// ── Services ─────────────────────────────────────────────────────────────
 	userSvc := service.NewCachedUserService(service.NewUserService(userRepo))
@@ -88,6 +89,7 @@ func NewRouter(db *sql.DB, store *storage.Service) http.Handler {
 	riskEvidenceSvc := service.NewRiskEvidenceService(riskEvidenceRepo)
 	riskAssessmentSvc := service.NewRiskAssessmentService(riskAssessmentRepo)
 	riskDashboardSvc := service.NewRiskDashboardService(riskDashboardRepo)
+	riskAnalyticsSvc := service.NewRiskAnalyticsService(riskAnalyticsRepo)
 
 	// ── Handlers ─────────────────────────────────────────────────────────────
 	userH := handler.NewUserHandler(userSvc)
@@ -115,6 +117,7 @@ func NewRouter(db *sql.DB, store *storage.Service) http.Handler {
 	riskEvidenceH := handler.NewRiskEvidenceHandler(riskEvidenceSvc)
 	riskAssessmentH := handler.NewRiskAssessmentHandler(riskAssessmentSvc)
 	riskDashboardH := handler.NewRiskDashboardHandler(riskDashboardSvc)
+	riskAnalyticsH := handler.NewRiskAnalyticsHandler(riskAnalyticsSvc)
 
 	// ── Routes ───────────────────────────────────────────────────────────────
 	mux := http.NewServeMux()
@@ -242,6 +245,7 @@ func NewRouter(db *sql.DB, store *storage.Service) http.Handler {
 	// Risks
 	mux.HandleFunc("GET /risks/next-sequence-number", riskH.NextSequenceNumber)
 	mux.HandleFunc("POST /risk/dashboard/search", riskDashboardH.Summary)
+	mux.HandleFunc("POST /risk/analytics/search", riskAnalyticsH.Summary)
 	mux.HandleFunc("POST /risks/search", riskH.SearchRisks)
 	mux.HandleFunc("GET /risks/{id}", riskH.GetRiskByID)
 	mux.HandleFunc("GET /risks/{id}/detail", riskH.GetRiskDetail)

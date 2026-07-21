@@ -87,7 +87,11 @@ func buildRiskDeps(
 	evidenceRepo := riskmysql.NewRiskEvidenceRepository(db)
 	escalationRepo := riskmysql.NewEscalationRepository(db)
 	notifRepo := riskmysql.NewNotificationRepository(db)
-	analyticsRepo := riskmysql.NewAnalyticsRepository(db)
+
+	analyticsSvc := riskservice.NewAnalyticsService(riskmysql.NewAnalyticsRepository(db))
+	if entityRepos["analytics"] {
+		analyticsSvc = riskservice.NewAssembledAnalyticsService(riskentity.NewAnalyticsRepository(ec))
+	}
 
 	// Dashboard: the entity returns the payload already assembled, so that path
 	// uses a passthrough service rather than the fact-pivoting one.
@@ -106,7 +110,7 @@ func buildRiskDeps(
 		Escalation:   riskservice.NewEscalationService(escalationRepo),
 		Notification: riskservice.NewNotificationService(notifRepo),
 		Compliance:   riskservice.NewComplianceReferenceService(complianceRepo),
-		Analytics:    riskservice.NewAnalyticsService(analyticsRepo),
+		Analytics:    analyticsSvc,
 		Dashboard:    dashboardSvc,
 		Employee:     riskservice.NewEmployeeSearchService(hrClient),
 	}

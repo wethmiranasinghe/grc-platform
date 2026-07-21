@@ -22,8 +22,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/risk/model"
-	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/risk/repository"
+	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/apierror"
+	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/domain"
+	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/repository"
 )
 
 // trendWindowMonths is the trailing window shown by the trend and level
@@ -33,43 +34,28 @@ const trendWindowMonths = 12
 // agingRisksLimit caps the "Aging Open Risks" table.
 const agingRisksLimit = 10
 
-// AnalyticsService assembles the risk analytics summary payload.
-type AnalyticsService interface {
-	Summary(ctx context.Context, registerID *int) (*model.AnalyticsSummary, error)
+// RiskAnalyticsService assembles the risk analytics summary payload.
+type RiskAnalyticsService interface {
+	Summary(ctx context.Context, req domain.RiskAnalyticsRequest) (domain.RiskAnalyticsSummary, error)
 }
 
-type analyticsService struct {
-	repo repository.AnalyticsRepository
+type riskAnalyticsService struct {
+	repo repository.RiskAnalyticsRepository
 }
 
-// NewAnalyticsService creates an AnalyticsService backed by repo.
-func NewAnalyticsService(repo repository.AnalyticsRepository) AnalyticsService {
-	return &analyticsService{repo: repo}
+// NewRiskAnalyticsService creates a RiskAnalyticsService backed by repo.
+func NewRiskAnalyticsService(repo repository.RiskAnalyticsRepository) RiskAnalyticsService {
+	return &riskAnalyticsService{repo: repo}
 }
 
-// assembledAnalyticsService serves an analytics payload that arrives already
-// assembled, which is how the Compliance Entity returns it. The scaffolding
-// helpers below are unused on this path — the entity owns the trailing window
-// now — but remain while the MySQL implementation does.
-type assembledAnalyticsService struct {
-	source interface {
-		Summary(ctx context.Context, registerID *int) (*model.AnalyticsSummary, error)
+// Summary owns the clock and the window constants: the entity decides what
+// "the trailing 12 months" means, so every caller sees the same window and none
+// has to compute date bounds just to ask for a chart.
+func (s *riskAnalyticsService) Summary(ctx context.Context, req domain.RiskAnalyticsRequest) (domain.RiskAnalyticsSummary, error) {
+	if req.RegisterID != nil && *req.RegisterID <= 0 {
+		return domain.RiskAnalyticsSummary{}, &apierror.ValidationError{Msg: "registerId must be a positive integer"}
 	}
-}
-
-// NewAssembledAnalyticsService creates an AnalyticsService that passes an
-// already-assembled payload straight through.
-func NewAssembledAnalyticsService(source interface {
-	Summary(ctx context.Context, registerID *int) (*model.AnalyticsSummary, error)
-}) AnalyticsService {
-	return &assembledAnalyticsService{source: source}
-}
-
-func (s *assembledAnalyticsService) Summary(ctx context.Context, registerID *int) (*model.AnalyticsSummary, error) {
-	return s.source.Summary(ctx, registerID)
-}
-
-func (s *analyticsService) Summary(ctx context.Context, registerID *int) (*model.AnalyticsSummary, error) {
+	registerID := req.RegisterID
 	now := time.Now().UTC()
 	monthStart := firstOfMonth(now)
 	since := monthStart.AddDate(0, -(trendWindowMonths - 1), 0)
@@ -77,40 +63,40 @@ func (s *analyticsService) Summary(ctx context.Context, registerID *int) (*model
 
 	kpis, err := s.buildKPIs(ctx, registerID, monthStart)
 	if err != nil {
-		return nil, err
+		return domain.RiskAnalyticsSummary{}, err
 	}
 
 	identified, err := s.repo.IdentifiedTrend(ctx, registerID, dateString(since))
 	if err != nil {
-		return nil, err
+		return domain.RiskAnalyticsSummary{}, err
 	}
 	closed, err := s.repo.ClosedTrend(ctx, registerID, dateString(since))
 	if err != nil {
-		return nil, err
+		return domain.RiskAnalyticsSummary{}, err
 	}
 	levelRows, err := s.repo.LevelDistribution(ctx, registerID, dateString(since))
 	if err != nil {
-		return nil, err
+		return domain.RiskAnalyticsSummary{}, err
 	}
 	levelRef, err := s.repo.LevelReference(ctx)
 	if err != nil {
-		return nil, err
+		return domain.RiskAnalyticsSummary{}, err
 	}
 
-	var registerShares []model.RegisterShare
-	var identifiedByRegister, closedByRegister []model.MonthRegisterCount
+	var registerShares []domain.RegisterShare
+	var identifiedByRegister, closedByRegister []domain.MonthRegisterCount
 	if registerID == nil {
 		registerShares, err = s.repo.RegisterTotals(ctx)
 		if err != nil {
-			return nil, err
+			return domain.RiskAnalyticsSummary{}, err
 		}
 		identifiedRows, err := s.repo.IdentifiedTrendByRegister(ctx, registerID, dateString(since))
 		if err != nil {
-			return nil, err
+			return domain.RiskAnalyticsSummary{}, err
 		}
 		closedRows, err := s.repo.ClosedTrendByRegister(ctx, registerID, dateString(since))
 		if err != nil {
-			return nil, err
+			return domain.RiskAnalyticsSummary{}, err
 		}
 		identifiedByRegister = buildTrendByRegister(months, identifiedRows)
 		closedByRegister = buildTrendByRegister(months, closedRows)
@@ -118,34 +104,34 @@ func (s *analyticsService) Summary(ctx context.Context, registerID *int) (*model
 
 	complianceShares, err := s.repo.ComplianceDistribution(ctx, registerID)
 	if err != nil {
-		return nil, err
+		return domain.RiskAnalyticsSummary{}, err
 	}
 	treatmentShares, err := s.repo.TreatmentMix(ctx, registerID)
 	if err != nil {
-		return nil, err
+		return domain.RiskAnalyticsSummary{}, err
 	}
 	funnel, err := s.repo.WorkflowFunnel(ctx, registerID)
 	if err != nil {
-		return nil, err
+		return domain.RiskAnalyticsSummary{}, err
 	}
 	aging, err := s.repo.AgingRisks(ctx, registerID, agingRisksLimit)
 	if err != nil {
-		return nil, err
+		return domain.RiskAnalyticsSummary{}, err
 	}
 	if aging == nil {
-		aging = []model.AgingRiskItem{}
+		aging = []domain.AgingRiskItem{}
 	}
 	if complianceShares == nil {
-		complianceShares = []model.ComplianceShare{}
+		complianceShares = []domain.ComplianceShare{}
 	}
 	if treatmentShares == nil {
-		treatmentShares = []model.TreatmentShare{}
+		treatmentShares = []domain.TreatmentShare{}
 	}
 	if funnel == nil {
-		funnel = []model.WorkflowStageCount{}
+		funnel = []domain.WorkflowStageCount{}
 	}
 
-	return &model.AnalyticsSummary{
+	return domain.RiskAnalyticsSummary{
 		KPIs:                 *kpis,
 		Trend:                buildTrend(months, identified, closed),
 		LevelDistribution:    buildLevelDistribution(months, levelRows, levelRef),
@@ -159,7 +145,7 @@ func (s *analyticsService) Summary(ctx context.Context, registerID *int) (*model
 	}, nil
 }
 
-func (s *analyticsService) buildKPIs(ctx context.Context, registerID *int, monthStart time.Time) (*model.AnalyticsKPIs, error) {
+func (s *riskAnalyticsService) buildKPIs(ctx context.Context, registerID *int, monthStart time.Time) (*domain.RiskAnalyticsKPIs, error) {
 	newThisMonth, err := s.repo.NewThisMonthCount(ctx, registerID, dateString(monthStart))
 	if err != nil {
 		return nil, err
@@ -172,7 +158,7 @@ func (s *analyticsService) buildKPIs(ctx context.Context, registerID *int, month
 	if err != nil {
 		return nil, err
 	}
-	return &model.AnalyticsKPIs{
+	return &domain.RiskAnalyticsKPIs{
 		NewRisksThisMonth: newThisMonth,
 		AvgDaysToClose:    roundPtr(avgDays),
 		AvgEffectiveScore: roundPtr(avgScore),
@@ -181,8 +167,8 @@ func (s *analyticsService) buildKPIs(ctx context.Context, registerID *int, month
 
 // buildTrend merges identified/closed monthly rows onto a fixed month
 // scaffold so every one of the trailing 12 months appears, even at zero.
-func buildTrend(months []string, identified []model.MonthScoreStat, closed []model.MonthCount) []model.TrendPoint {
-	identifiedByMonth := make(map[string]model.MonthScoreStat, len(identified))
+func buildTrend(months []string, identified []domain.MonthScoreStat, closed []domain.MonthCount) []domain.TrendPoint {
+	identifiedByMonth := make(map[string]domain.MonthScoreStat, len(identified))
 	for _, m := range identified {
 		identifiedByMonth[m.Month] = m
 	}
@@ -191,9 +177,9 @@ func buildTrend(months []string, identified []model.MonthScoreStat, closed []mod
 		closedByMonth[c.Month] = c.Count
 	}
 
-	out := make([]model.TrendPoint, 0, len(months))
+	out := make([]domain.TrendPoint, 0, len(months))
 	for _, month := range months {
-		p := model.TrendPoint{Month: month, ClosedCount: closedByMonth[month]}
+		p := domain.TrendPoint{Month: month, ClosedCount: closedByMonth[month]}
 		if id, ok := identifiedByMonth[month]; ok {
 			p.IdentifiedCount = id.Count
 			p.AvgScore = roundPtr(&id.AvgScore)
@@ -208,21 +194,21 @@ func buildTrend(months []string, identified []model.MonthScoreStat, closed []mod
 // The level set and reference color come from levelRef (sourced from
 // risk_score), not a hardcoded list, so a level added to risk_score appears
 // automatically instead of being silently dropped.
-func buildLevelDistribution(months []string, rows []model.MonthLevelCount, levelRef []model.RiskLevelRef) []model.MonthLevelCount {
+func buildLevelDistribution(months []string, rows []domain.MonthLevelCount, levelRef []domain.RiskLevelRef) []domain.MonthLevelCount {
 	type key struct{ month, level string }
-	counts := map[key]model.MonthLevelCount{}
+	counts := map[key]domain.MonthLevelCount{}
 	for _, r := range rows {
 		counts[key{r.Month, r.RiskLevel}] = r
 	}
 
-	out := make([]model.MonthLevelCount, 0, len(months)*len(levelRef))
+	out := make([]domain.MonthLevelCount, 0, len(months)*len(levelRef))
 	for _, month := range months {
 		for _, level := range levelRef {
 			if r, ok := counts[key{month, level.RiskLevel}]; ok {
 				out = append(out, r)
 				continue
 			}
-			out = append(out, model.MonthLevelCount{
+			out = append(out, domain.MonthLevelCount{
 				Month:     month,
 				RiskLevel: level.RiskLevel,
 				ColorCode: level.ColorCode,
@@ -239,7 +225,7 @@ func buildLevelDistribution(months []string, rows []model.MonthLevelCount, level
 // every one of its months is present (zero where absent) so its line spans
 // the full chart width. Register set is derived from the data, not a fixed
 // list, since registers can be added over time.
-func buildTrendByRegister(months []string, rows []model.MonthRegisterCount) []model.MonthRegisterCount {
+func buildTrendByRegister(months []string, rows []domain.MonthRegisterCount) []domain.MonthRegisterCount {
 	type key struct{ month, register string }
 	counts := map[key]int{}
 	var registers []string
@@ -253,10 +239,10 @@ func buildTrendByRegister(months []string, rows []model.MonthRegisterCount) []mo
 	}
 	sort.Strings(registers)
 
-	out := make([]model.MonthRegisterCount, 0, len(months)*len(registers))
+	out := make([]domain.MonthRegisterCount, 0, len(months)*len(registers))
 	for _, register := range registers {
 		for _, month := range months {
-			out = append(out, model.MonthRegisterCount{
+			out = append(out, domain.MonthRegisterCount{
 				Month:        month,
 				RegisterName: register,
 				Count:        counts[key{month, register}],
