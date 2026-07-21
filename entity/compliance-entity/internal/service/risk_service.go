@@ -51,24 +51,63 @@ var validRiskStatuses = map[string]bool{
 
 var validRiskQuarters = map[string]bool{"Q1": true, "Q2": true, "Q3": true, "Q4": true}
 
-// allowedRiskTransitions defines the legal next statuses for each risk workflow_status.
-// Happy path: DRAFT → PENDING_RISK_OWNER_APPROVAL → PENDING_MANAGEMENT_APPROVAL →
-// PENDING_COMPLIANCE_REVIEW → IN_REMEDIATION → PENDING_OWNER_COMPLETION_APPROVAL →
-// PENDING_COMPLIANCE_CLOSURE → CLOSED. Plus amendment, revision, escalation, and
-// cancellation paths. CLOSED and CANCELLED are terminal.
+// allowedRiskTransitions defines the legal next statuses for each risk
+// workflow_status. It is derived from the GRC backend's risk service, which
+// owns the workflow and is the authoritative definition of it:
+//
+//   - OwnerApprove: PENDING_RISK_OWNER_APPROVAL or PENDING_AMENDMENT →
+//     PENDING_COMPLIANCE_REVIEW, or → PENDING_MANAGEMENT_APPROVAL when the
+//     treatment is ACCEPT and the gross level is HIGH; and
+//     PENDING_OWNER_COMPLETION_APPROVAL → PENDING_COMPLIANCE_CLOSURE
+//   - ManagementApprove: PENDING_MANAGEMENT_APPROVAL → PENDING_COMPLIANCE_REVIEW
+//   - Approve:          PENDING_COMPLIANCE_REVIEW → IN_REMEDIATION
+//   - Reject:           any of the five pending-approval states → PENDING_REVISION
+//   - Complete:         IN_REMEDIATION → PENDING_OWNER_COMPLETION_APPROVAL
+//   - Resubmit:         PENDING_REVISION → PENDING_RISK_OWNER_APPROVAL, or →
+//     PENDING_OWNER_COMPLETION_APPROVAL when the rejection stage was COMPLETION_OWNER
+//   - Close:            PENDING_COMPLIANCE_CLOSURE → CLOSED
+//   - Cancel:           PENDING_RISK_OWNER_APPROVAL → CANCELLED
+//
+// An earlier version of this map encoded a different workflow, written before
+// the risk module existed, and would have rejected the backend's most common
+// transition (PENDING_RISK_OWNER_APPROVAL → PENDING_COMPLIANCE_REVIEW) along
+// with every rejection path. When the two disagree, the backend is right.
+//
+// This map is deliberately a superset: DRAFT and ESCALATED transitions are kept
+// even though the backend never performs them, and CANCELLED is permitted from
+// every non-terminal state. Being more permissive than the caller is safe —
+// the backend decides which transition to make, and this only stops a move that
+// is nonsense in every workflow. Being less permissive is not: it turns a
+// legitimate action into a 409. CLOSED and CANCELLED remain terminal.
 var allowedRiskTransitions = map[string][]string{
-	"DRAFT":                             {"PENDING_RISK_OWNER_APPROVAL", "CANCELLED"},
-	"PENDING_RISK_OWNER_APPROVAL":       {"PENDING_MANAGEMENT_APPROVAL", "PENDING_AMENDMENT", "CANCELLED"},
-	"PENDING_MANAGEMENT_APPROVAL":       {"PENDING_COMPLIANCE_REVIEW", "PENDING_AMENDMENT", "ESCALATED", "CANCELLED"},
-	"PENDING_COMPLIANCE_REVIEW":         {"IN_REMEDIATION", "PENDING_REVISION", "ESCALATED", "CANCELLED"},
-	"IN_REMEDIATION":                    {"PENDING_OWNER_COMPLETION_APPROVAL", "ESCALATED"},
-	"PENDING_OWNER_COMPLETION_APPROVAL": {"PENDING_COMPLIANCE_CLOSURE", "IN_REMEDIATION"},
-	"PENDING_COMPLIANCE_CLOSURE":        {"CLOSED", "IN_REMEDIATION"},
-	"PENDING_AMENDMENT":                 {"PENDING_RISK_OWNER_APPROVAL", "CANCELLED"},
-	"PENDING_REVISION":                  {"PENDING_COMPLIANCE_REVIEW", "CANCELLED"},
-	"ESCALATED":                         {"PENDING_MANAGEMENT_APPROVAL", "CANCELLED"},
-	"CLOSED":                            {},
-	"CANCELLED":                         {},
+	"DRAFT": {"PENDING_RISK_OWNER_APPROVAL", "CANCELLED"},
+	"PENDING_RISK_OWNER_APPROVAL": {
+		"PENDING_COMPLIANCE_REVIEW", "PENDING_MANAGEMENT_APPROVAL",
+		"PENDING_AMENDMENT", "PENDING_REVISION", "ESCALATED", "CANCELLED",
+	},
+	"PENDING_AMENDMENT": {
+		"PENDING_COMPLIANCE_REVIEW", "PENDING_MANAGEMENT_APPROVAL",
+		"PENDING_RISK_OWNER_APPROVAL", "PENDING_REVISION", "CANCELLED",
+	},
+	"PENDING_MANAGEMENT_APPROVAL": {
+		"PENDING_COMPLIANCE_REVIEW", "PENDING_AMENDMENT",
+		"PENDING_REVISION", "ESCALATED", "CANCELLED",
+	},
+	"PENDING_COMPLIANCE_REVIEW": {
+		"IN_REMEDIATION", "PENDING_REVISION", "ESCALATED", "CANCELLED",
+	},
+	"IN_REMEDIATION": {"PENDING_OWNER_COMPLETION_APPROVAL", "ESCALATED"},
+	"PENDING_OWNER_COMPLETION_APPROVAL": {
+		"PENDING_COMPLIANCE_CLOSURE", "PENDING_REVISION", "IN_REMEDIATION",
+	},
+	"PENDING_COMPLIANCE_CLOSURE": {"CLOSED", "IN_REMEDIATION"},
+	"PENDING_REVISION": {
+		"PENDING_RISK_OWNER_APPROVAL", "PENDING_OWNER_COMPLETION_APPROVAL",
+		"PENDING_COMPLIANCE_REVIEW", "CANCELLED",
+	},
+	"ESCALATED": {"PENDING_MANAGEMENT_APPROVAL", "CANCELLED"},
+	"CLOSED":    {},
+	"CANCELLED": {},
 }
 
 // isValidRiskTransition reports whether moving from → to is a legal workflow step.
@@ -213,4 +252,18 @@ func (s *riskService) UpdateRisk(ctx context.Context, id int, req domain.UpdateR
 		return domain.Risk{}, err
 	}
 	return *r, nil
+}
+
+// NextSequenceNumber previews the sequence number the next risk created for
+// this source register would get. It consumes nothing — CreateRisk owns the
+// increment.
+func (s *riskService) NextSequenceNumber(ctx context.Context, sourceRegisterID int) (domain.NextSequenceResponse, error) {
+	if sourceRegisterID <= 0 {
+		return domain.NextSequenceResponse{}, &apierror.ValidationError{Msg: "sourceRegisterId must be a positive integer"}
+	}
+	n, err := s.repo.NextSequenceNumber(ctx, sourceRegisterID)
+	if err != nil {
+		return domain.NextSequenceResponse{}, err
+	}
+	return domain.NextSequenceResponse{NextSequenceNumber: n}, nil
 }

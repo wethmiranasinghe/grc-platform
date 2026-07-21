@@ -468,6 +468,27 @@ type Risk struct {
 	ReassessmentDate   *string   `json:"reassessmentDate"`   // YYYY-MM-DD
 	CreatedOn          time.Time `json:"createdOn"`
 	UpdatedOn          time.Time `json:"updatedOn"`
+
+	// Remaining risk columns. These were absent while nothing consumed this
+	// type; the GRC backend's risk detail and list views need all of them, and
+	// omitting one renders as a blank field rather than an error.
+	RiskIdentifiedDate     *string `json:"riskIdentifiedDate"` // YYYY-MM-DD
+	IdentifiedByType       *string `json:"identifiedByType"`   // EMPLOYEE | EXTERNAL_PERSON | TOOL
+	IdentifiedByName       *string `json:"identifiedByName"`
+	ImpactDescription      *string `json:"impactDescription"`
+	ActionPlanID           *int    `json:"actionPlanId"`
+	Progress               *string `json:"progress"`
+	ComplianceApprovalBy   *int    `json:"complianceApprovalBy"`
+	ComplianceApprovalDate *string `json:"complianceApprovalDate"` // YYYY-MM-DD
+	GitIssueURL            *string `json:"gitIssueUrl"`
+	EmailSubject           *string `json:"emailSubject"`
+	Remarks                *string `json:"remarks"`
+	RiskType               string  `json:"riskType"` // NEW | UPDATED
+	RejectionComment       *string `json:"rejectionComment"`
+	RejectionStage         *string `json:"rejectionStage"`
+	OwnerFirstApprovedAt   *string `json:"ownerFirstApprovedAt"`
+	CreatedBy              string  `json:"createdBy"`
+	UpdatedBy              string  `json:"updatedBy"`
 }
 
 // SearchRisksRequest is the payload for POST /risks/search.
@@ -851,12 +872,14 @@ type CreateRiskRequest struct {
 	ImpactDescription  *string `json:"impactDescription"`
 	RiskIdentifiedDate *string `json:"riskIdentifiedDate"`
 	IdentifiedByType   *string `json:"identifiedByType"` // EMPLOYEE | EXTERNAL_PERSON | TOOL
-	IdentifiedByUserID *int    `json:"identifiedByUserId"`
-	IdentifiedByName   *string `json:"identifiedByName"`
-	GitIssueURL        *string `json:"gitIssueUrl"`
-	EmailSubject       *string `json:"emailSubject"`
-	Remarks            *string `json:"remarks"`
-	CreatedBy          string  `json:"createdBy"`
+	// IdentifiedByUserID is deliberately absent: the GRC platform dropped the
+	// risk.identified_by_user_id column, and risks now record only
+	// identified_by_name.
+	IdentifiedByName *string `json:"identifiedByName"`
+	GitIssueURL      *string `json:"gitIssueUrl"`
+	EmailSubject     *string `json:"emailSubject"`
+	Remarks          *string `json:"remarks"`
+	CreatedBy        string  `json:"createdBy"`
 }
 
 // UpdateRiskRequest is the payload for PATCH /risks/{id}.
@@ -878,8 +901,17 @@ type UpdateRiskRequest struct {
 	ActionPlanID           *int    `json:"actionPlanId"`
 	GitIssueURL            *string `json:"gitIssueUrl"`
 	Remarks                *string `json:"remarks"`
-	UpdatedBy              string  `json:"updatedBy"`
-	ExpectedStatus         string  `json:"-"` // set server-side for atomic transition; never decoded from JSON
+	// EmailSubject is settable on update: the backend treats a change to it as
+	// one of the three edits that move an IN_REMEDIATION risk to
+	// PENDING_AMENDMENT, so it must be updatable, not create-only.
+	EmailSubject *string `json:"emailSubject"`
+	// RiskType and OwnerFirstApprovedAt back the backend's SetRiskType and
+	// SetOwnerFirstApprovedAt, which are single-column updates rather than
+	// workflow transitions.
+	RiskType             *string `json:"riskType"` // NEW | UPDATED
+	OwnerFirstApprovedAt *string `json:"ownerFirstApprovedAt"`
+	UpdatedBy            string  `json:"updatedBy"`
+	ExpectedStatus       string  `json:"-"` // set server-side for atomic transition; never decoded from JSON
 }
 
 // =============================================================================
@@ -1231,4 +1263,9 @@ type CreateAuditAIValidationLogRequest struct {
 // ListAuditAIValidationLogsResponse is returned by GET /evidence/{evidenceId}/ai-validations.
 type ListAuditAIValidationLogsResponse struct {
 	Validations []AuditAIValidationLog `json:"validations"`
+}
+
+// NextSequenceResponse is returned by GET /risks/next-sequence-number.
+type NextSequenceResponse struct {
+	NextSequenceNumber int `json:"nextSequenceNumber"`
 }

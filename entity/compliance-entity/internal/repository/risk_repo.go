@@ -33,6 +33,7 @@ type RiskRepository interface {
 	GetRiskByID(ctx context.Context, id int) (*domain.Risk, error)
 	CreateRisk(ctx context.Context, req domain.CreateRiskRequest) (*domain.Risk, error)
 	UpdateRisk(ctx context.Context, id int, req domain.UpdateRiskRequest) (*domain.Risk, error)
+	NextSequenceNumber(ctx context.Context, sourceRegisterID int) (int, error)
 }
 
 type riskRepo struct{ db *sql.DB }
@@ -50,7 +51,16 @@ const riskSelectCols = `
   r.gross_score_id, rs.risk_level AS gross_risk_level,
   DATE_FORMAT(r.implementation_date, '%Y-%m-%d'),
   DATE_FORMAT(r.reassessment_date,   '%Y-%m-%d'),
-  r.created_at, r.updated_at`
+  r.created_at, r.updated_at,
+  DATE_FORMAT(r.risk_identified_date, '%Y-%m-%d'),
+  r.identified_by_type, r.identified_by_name,
+  r.impact_description, r.action_plan_id, r.progress,
+  r.compliance_approval_by,
+  DATE_FORMAT(r.compliance_approval_date, '%Y-%m-%d'),
+  r.git_issue_url, r.email_subject, r.remarks,
+  r.risk_type, r.rejection_comment, r.rejection_stage,
+  DATE_FORMAT(r.owner_first_approved_at, '%Y-%m-%d'),
+  r.created_by, r.updated_by`
 
 const riskFromClause = `
 FROM risk r
@@ -190,16 +200,16 @@ func (r *riskRepo) CreateRisk(ctx context.Context, req domain.CreateRiskRequest)
 			treatment_strategy, gross_score_id,
 			implementation_date, reassessment_date,
 			impact_description, risk_identified_date,
-			identified_by_type, identified_by_user_id, identified_by_name,
+			identified_by_type, identified_by_name,
 			git_issue_url, email_subject, remarks,
 			workflow_status, created_by, updated_by
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_RISK_OWNER_APPROVAL', ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_RISK_OWNER_APPROVAL', ?, ?)`,
 		riskCode, req.RiskYear, req.RiskQuarter, req.RiskTitle, req.RiskDescription,
 		req.SourceRegisterID, req.AssignmentTeamID, req.AssignerID, req.OwnerID,
 		req.TreatmentStrategy, nullableInt(req.GrossScoreID),
 		req.ImplementationDate, req.ReassessmentDate,
 		req.ImpactDescription, req.RiskIdentifiedDate,
-		req.IdentifiedByType, nullableInt(req.IdentifiedByUserID), req.IdentifiedByName,
+		req.IdentifiedByType, req.IdentifiedByName,
 		req.GitIssueURL, req.EmailSubject, req.Remarks,
 		req.CreatedBy, req.CreatedBy)
 	if err != nil {
@@ -248,6 +258,18 @@ func (r *riskRepo) UpdateRisk(ctx context.Context, id int, req domain.UpdateRisk
 	if req.Progress != nil {
 		sets = append(sets, "progress = ?")
 		args = append(args, *req.Progress)
+	}
+	if req.EmailSubject != nil {
+		sets = append(sets, "email_subject = ?")
+		args = append(args, *req.EmailSubject)
+	}
+	if req.RiskType != nil {
+		sets = append(sets, "risk_type = ?")
+		args = append(args, *req.RiskType)
+	}
+	if req.OwnerFirstApprovedAt != nil {
+		sets = append(sets, "owner_first_approved_at = ?")
+		args = append(args, *req.OwnerFirstApprovedAt)
 	}
 	if req.RejectionComment != nil {
 		sets = append(sets, "rejection_comment = ?")
@@ -321,7 +343,11 @@ func (r *riskRepo) UpdateRisk(ctx context.Context, id int, req domain.UpdateRisk
 func scanRisk(s scanner) (*domain.Risk, error) {
 	var r domain.Risk
 	var desc, treatment, grossLevel, implDate, reassDate sql.NullString
-	var grossScoreID sql.NullInt64
+	var identifiedDate, identifiedByType, identifiedByName sql.NullString
+	var impactDesc, progress, complianceApprovalDate sql.NullString
+	var gitIssueURL, emailSubject, remarks sql.NullString
+	var rejectionComment, rejectionStage, ownerFirstApprovedAt sql.NullString
+	var grossScoreID, actionPlanID, complianceApprovalBy sql.NullInt64
 	err := s.Scan(
 		&r.ID, &r.RiskCode, &r.RiskYear, &r.RiskQuarter, &r.RiskTitle, &desc,
 		&r.SourceRegisterID, &r.SourceRegisterName,
@@ -332,6 +358,13 @@ func scanRisk(s scanner) (*domain.Risk, error) {
 		&grossScoreID, &grossLevel,
 		&implDate, &reassDate,
 		&r.CreatedOn, &r.UpdatedOn,
+		&identifiedDate, &identifiedByType, &identifiedByName,
+		&impactDesc, &actionPlanID, &progress,
+		&complianceApprovalBy, &complianceApprovalDate,
+		&gitIssueURL, &emailSubject, &remarks,
+		&r.RiskType, &rejectionComment, &rejectionStage,
+		&ownerFirstApprovedAt,
+		&r.CreatedBy, &r.UpdatedBy,
 	)
 	if err != nil {
 		return nil, err
@@ -342,14 +375,63 @@ func scanRisk(s scanner) (*domain.Risk, error) {
 		}
 		return nil
 	}
+	nullInt := func(ni sql.NullInt64) *int {
+		if ni.Valid {
+			v := int(ni.Int64)
+			return &v
+		}
+		return nil
+	}
 	r.RiskDescription = nullStr(desc)
 	r.TreatmentStrategy = nullStr(treatment)
 	r.GrossRiskLevel = nullStr(grossLevel)
 	r.ImplementationDate = nullStr(implDate)
 	r.ReassessmentDate = nullStr(reassDate)
-	if grossScoreID.Valid {
-		v := int(grossScoreID.Int64)
-		r.GrossScoreID = &v
-	}
+	r.RiskIdentifiedDate = nullStr(identifiedDate)
+	r.IdentifiedByType = nullStr(identifiedByType)
+	r.IdentifiedByName = nullStr(identifiedByName)
+	r.ImpactDescription = nullStr(impactDesc)
+	r.Progress = nullStr(progress)
+	r.ComplianceApprovalDate = nullStr(complianceApprovalDate)
+	r.GitIssueURL = nullStr(gitIssueURL)
+	r.EmailSubject = nullStr(emailSubject)
+	r.Remarks = nullStr(remarks)
+	r.RejectionComment = nullStr(rejectionComment)
+	r.RejectionStage = nullStr(rejectionStage)
+	r.OwnerFirstApprovedAt = nullStr(ownerFirstApprovedAt)
+	r.GrossScoreID = nullInt(grossScoreID)
+	r.ActionPlanID = nullInt(actionPlanID)
+	r.ComplianceApprovalBy = nullInt(complianceApprovalBy)
 	return &r, nil
+}
+
+// NextSequenceNumber previews the sequence number the next risk created for
+// sourceRegisterID would receive, without consuming it. CreateRisk increments
+// the counter inside its transaction; this is a read used to show the risk code
+// on a form before the risk exists.
+//
+// A register with no row in risk_register_sequence has had no risks created
+// yet, so its next number is 1 — but only if the register itself exists,
+// otherwise a typo in the id would silently preview a valid-looking code.
+func (r *riskRepo) NextSequenceNumber(ctx context.Context, sourceRegisterID int) (int, error) {
+	var lastSeq int
+	err := r.db.QueryRowContext(ctx,
+		"SELECT last_sequence_number FROM risk_register_sequence WHERE risk_team_id = ?",
+		sourceRegisterID).Scan(&lastSeq)
+	if errors.Is(err, sql.ErrNoRows) {
+		var exists bool
+		if err := r.db.QueryRowContext(ctx,
+			"SELECT EXISTS(SELECT 1 FROM risk_team WHERE id = ?)",
+			sourceRegisterID).Scan(&exists); err != nil {
+			return 0, fmt.Errorf("risk.NextSequenceNumber validate register: %w", err)
+		}
+		if !exists {
+			return 0, &apierror.NotFoundError{Msg: fmt.Sprintf("source register %d not found", sourceRegisterID)}
+		}
+		return 1, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("risk.NextSequenceNumber: %w", err)
+	}
+	return lastSeq + 1, nil
 }

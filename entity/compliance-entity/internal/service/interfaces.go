@@ -142,6 +142,7 @@ type RiskService interface {
 	GetRiskByID(ctx context.Context, id int) (domain.Risk, error)
 	CreateRisk(ctx context.Context, req domain.CreateRiskRequest) (domain.Risk, error)
 	UpdateRisk(ctx context.Context, id int, req domain.UpdateRiskRequest) (domain.Risk, error)
+	NextSequenceNumber(ctx context.Context, sourceRegisterID int) (domain.NextSequenceResponse, error)
 }
 
 // RiskActionPlanService defines operations on risk_action_plan.
