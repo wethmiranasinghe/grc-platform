@@ -857,20 +857,20 @@ type UpdateRiskReferenceRequest struct {
 
 // CreateRiskRequest is the payload for POST /risks.
 type CreateRiskRequest struct {
-	RiskTitle          string  `json:"riskTitle"`
-	RiskDescription    *string `json:"riskDescription"`
-	SourceRegisterID   int     `json:"sourceRegisterId"`
-	AssignmentTeamID   int     `json:"assignmentTeamId"`
-	AssignerID         int     `json:"assignerId"`
-	OwnerID            int     `json:"ownerId"`
-	RiskYear    int    `json:"riskYear"`
-	RiskQuarter string `json:"riskQuarter"` // Q1 | Q2 | Q3 | Q4
+	RiskTitle        string  `json:"riskTitle"`
+	RiskDescription  *string `json:"riskDescription"`
+	SourceRegisterID int     `json:"sourceRegisterId"`
+	AssignmentTeamID int     `json:"assignmentTeamId"`
+	AssignerID       int     `json:"assignerId"`
+	OwnerID          int     `json:"ownerId"`
+	RiskYear         int     `json:"riskYear"`
+	RiskQuarter      string  `json:"riskQuarter"` // Q1 | Q2 | Q3 | Q4
 	// Likelihood and impact identify the gross score cell; the score_id is
 	// resolved server-side from risk_score, as it is for assessments. Callers
 	// describe the rating they gave, not the surrogate key behind it.
-	Likelihood        int     `json:"likelihood"`
-	Impact            int     `json:"impact"`
-	TreatmentStrategy *string `json:"treatmentStrategy"`
+	Likelihood         int     `json:"likelihood"`
+	Impact             int     `json:"impact"`
+	TreatmentStrategy  *string `json:"treatmentStrategy"`
 	ImplementationDate *string `json:"implementationDate"` // YYYY-MM-DD
 	ReassessmentDate   *string `json:"reassessmentDate"`   // YYYY-MM-DD
 	ImpactDescription  *string `json:"impactDescription"`
@@ -1335,4 +1335,48 @@ type ListAuditAIValidationLogsResponse struct {
 // NextSequenceResponse is returned by GET /risks/next-sequence-number.
 type NextSequenceResponse struct {
 	NextSequenceNumber int `json:"nextSequenceNumber"`
+}
+
+// =============================================================================
+// Risk detail
+// =============================================================================
+
+// RiskDetail is the fully-composed risk returned by GET /risks/{id}/detail:
+// every risk column, the display names its foreign keys resolve to, both scores,
+// and the related rows a risk page needs. Assembling it here rather than making
+// the caller issue six requests keeps the read consistent — the parts cannot
+// disagree with each other — and keeps a page load to one round trip.
+//
+// It carries only what is stored. Presentation-level entries, such as the
+// synthetic "initial" assessment some callers prepend so an assessment log
+// reads gross → reassessment → reassessment, are the caller's business.
+type RiskDetail struct {
+	Risk
+
+	// ComplianceApproverName resolves compliance_approval_by, which the
+	// summary Risk does not carry.
+	ComplianceApproverName *string `json:"complianceApproverName"`
+
+	// GrossScore is the rating given at creation. EffectiveScore is the
+	// residual standing now: the most recent assessment's score when one
+	// exists, otherwise the gross score. Both are nil when a risk has no
+	// gross score and no assessments.
+	GrossScore     *RiskScore `json:"grossScore"`
+	EffectiveScore *RiskScore `json:"effectiveScore"`
+
+	ComplianceReferences []RiskComplianceReference `json:"complianceReferences"`
+	ActionPlan           *RiskActionPlanDetail     `json:"actionPlan"`
+	Assessments          []RiskAssessment          `json:"assessments"`
+}
+
+// RiskActionPlanDetail is the risk's STANDARD action plan with its steps
+// embedded, ordered by step_no.
+type RiskActionPlanDetail struct {
+	ID            int              `json:"id"`
+	RiskID        int              `json:"riskId"`
+	ActionOwnerID *int             `json:"actionOwnerId"`
+	Description   *string          `json:"description"`
+	Status        string           `json:"status"`
+	PlanType      string           `json:"planType"`
+	Steps         []RiskActionStep `json:"steps"`
 }

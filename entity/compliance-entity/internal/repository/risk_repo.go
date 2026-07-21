@@ -34,6 +34,7 @@ type RiskRepository interface {
 	CreateRisk(ctx context.Context, req domain.CreateRiskRequest) (*domain.Risk, error)
 	UpdateRisk(ctx context.Context, id int, req domain.UpdateRiskRequest) (*domain.Risk, error)
 	NextSequenceNumber(ctx context.Context, sourceRegisterID int) (int, error)
+	GetRiskDetail(ctx context.Context, id int) (*domain.RiskDetail, error)
 }
 
 type riskRepo struct{ db *sql.DB }
@@ -557,6 +558,14 @@ func (r *riskRepo) applyActionSteps(ctx context.Context, tx *sql.Tx, riskID int,
 }
 
 func scanRisk(s scanner) (*domain.Risk, error) {
+	return scanRiskWithExtras(s)
+}
+
+// scanRiskWithExtras scans the riskSelectCols projection into a domain.Risk,
+// then any extra destinations the caller appended to the SELECT. Detail reads
+// add the compliance approver's name and the two score joins this way, so the
+// base column list stays defined in exactly one place.
+func scanRiskWithExtras(s scanner, extras ...any) (*domain.Risk, error) {
 	var r domain.Risk
 	var desc, treatment, grossLevel, implDate, reassDate sql.NullString
 	var identifiedDate, identifiedByType, identifiedByName sql.NullString
@@ -564,7 +573,8 @@ func scanRisk(s scanner) (*domain.Risk, error) {
 	var gitIssueURL, emailSubject, remarks sql.NullString
 	var rejectionComment, rejectionStage, ownerFirstApprovedAt sql.NullString
 	var grossScoreID, actionPlanID, complianceApprovalBy sql.NullInt64
-	err := s.Scan(
+
+	dest := []any{
 		&r.ID, &r.RiskCode, &r.RiskYear, &r.RiskQuarter, &r.RiskTitle, &desc,
 		&r.SourceRegisterID, &r.SourceRegisterName,
 		&r.AssignmentTeamID, &r.AssignmentTeamName,
@@ -581,10 +591,11 @@ func scanRisk(s scanner) (*domain.Risk, error) {
 		&r.RiskType, &rejectionComment, &rejectionStage,
 		&ownerFirstApprovedAt,
 		&r.CreatedBy, &r.UpdatedBy,
-	)
-	if err != nil {
+	}
+	if err := s.Scan(append(dest, extras...)...); err != nil {
 		return nil, err
 	}
+
 	nullStr := func(ns sql.NullString) *string {
 		if ns.Valid {
 			return &ns.String
@@ -650,4 +661,159 @@ func (r *riskRepo) NextSequenceNumber(ctx context.Context, sourceRegisterID int)
 		return 0, fmt.Errorf("risk.NextSequenceNumber: %w", err)
 	}
 	return lastSeq + 1, nil
+}
+
+// effectiveScoreJoin resolves a risk's current residual standing: the score of
+// its most recent assessment when it has one, otherwise its gross score. It is
+// a LEFT JOIN because a risk with neither must still be readable — dropping it
+// from a detail page would be worse than showing it without a score.
+const effectiveScoreJoin = `
+LEFT JOIN risk_score eff ON eff.id = COALESCE(
+	(SELECT ra.score_id FROM risk_assessment ra
+	  WHERE ra.risk_id = r.id
+	  ORDER BY ra.created_at DESC, ra.id DESC LIMIT 1),
+	r.gross_score_id)`
+
+// GetRiskDetail assembles the whole risk page in one call: the risk, its
+// resolved names, both scores, and its references, action plan, steps and
+// assessments.
+func (r *riskRepo) GetRiskDetail(ctx context.Context, id int) (*domain.RiskDetail, error) {
+	var d domain.RiskDetail
+
+	var approverName sql.NullString
+	var grossID, grossLikelihood, grossImpact, grossRating sql.NullInt64
+	var grossLevel, grossColor sql.NullString
+	var effID, effLikelihood, effImpact, effRating sql.NullInt64
+	var effLevel, effColor sql.NullString
+
+	row := r.db.QueryRowContext(ctx, `
+		SELECT `+riskSelectCols+`,
+		       ca.display_name,
+		       rs.id, rs.likelihood, rs.impact, rs.risk_rating, rs.risk_level, rs.color_code,
+		       eff.id, eff.likelihood, eff.impact, eff.risk_rating, eff.risk_level, eff.color_code
+		`+riskFromClause+`
+		LEFT JOIN `+"`user`"+` ca ON ca.id = r.compliance_approval_by
+		`+effectiveScoreJoin+`
+		WHERE r.id = ?`, id)
+
+	risk, err := scanRiskWithExtras(row,
+		&approverName,
+		&grossID, &grossLikelihood, &grossImpact, &grossRating, &grossLevel, &grossColor,
+		&effID, &effLikelihood, &effImpact, &effRating, &effLevel, &effColor)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("risk %d not found", id)}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("risk.GetDetail(%d): %w", id, err)
+	}
+	d.Risk = *risk
+	if approverName.Valid {
+		d.ComplianceApproverName = &approverName.String
+	}
+	d.GrossScore = buildScore(grossID, grossLikelihood, grossImpact, grossRating, grossLevel, grossColor)
+	d.EffectiveScore = buildScore(effID, effLikelihood, effImpact, effRating, effLevel, effColor)
+
+	if d.ComplianceReferences, err = r.detailReferences(ctx, id); err != nil {
+		return nil, err
+	}
+	if d.ActionPlan, err = r.detailActionPlan(ctx, id); err != nil {
+		return nil, err
+	}
+	if d.Assessments, err = r.detailAssessments(ctx, id); err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+// buildScore returns nil when the joined score row was absent, so callers can
+// tell "no score" from "a score of zero".
+func buildScore(id, likelihood, impact, rating sql.NullInt64, level, colour sql.NullString) *domain.RiskScore {
+	if !id.Valid {
+		return nil
+	}
+	return &domain.RiskScore{
+		ID:         int(id.Int64),
+		Likelihood: int(likelihood.Int64),
+		Impact:     int(impact.Int64),
+		RiskRating: int(rating.Int64),
+		RiskLevel:  level.String,
+		ColorCode:  colour.String,
+	}
+}
+
+func (r *riskRepo) detailReferences(ctx context.Context, id int) ([]domain.RiskComplianceReference, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT scr.id, scr.name, scr.description, scr.created_at, scr.updated_at
+		FROM risk_compliance_reference rcr
+		JOIN risk_security_compliance_reference scr ON scr.id = rcr.reference_id
+		WHERE rcr.risk_id = ? ORDER BY scr.name`, id)
+	if err != nil {
+		return nil, fmt.Errorf("risk.GetDetail references: %w", err)
+	}
+	defer rows.Close()
+
+	refs := []domain.RiskComplianceReference{}
+	for rows.Next() {
+		var ref domain.RiskComplianceReference
+		if err := rows.Scan(&ref.ID, &ref.Name, &ref.Description, &ref.CreatedOn, &ref.UpdatedOn); err != nil {
+			return nil, fmt.Errorf("risk.GetDetail scan reference: %w", err)
+		}
+		refs = append(refs, ref)
+	}
+	return refs, rows.Err()
+}
+
+func (r *riskRepo) detailActionPlan(ctx context.Context, id int) (*domain.RiskActionPlanDetail, error) {
+	var ap domain.RiskActionPlanDetail
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, risk_id, action_owner_id, description, status, plan_type
+		 FROM risk_action_plan WHERE risk_id = ? AND plan_type = 'STANDARD' LIMIT 1`, id).
+		Scan(&ap.ID, &ap.RiskID, &ap.ActionOwnerID, &ap.Description, &ap.Status, &ap.PlanType)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil // a risk without a standard plan is legitimate, not an error
+	}
+	if err != nil {
+		return nil, fmt.Errorf("risk.GetDetail action plan: %w", err)
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, plan_id, step_no, description, status,
+		        DATE_FORMAT(completed_date,'%Y-%m-%d'), created_at, updated_at
+		 FROM risk_action_step WHERE plan_id = ? ORDER BY step_no`, ap.ID)
+	if err != nil {
+		return nil, fmt.Errorf("risk.GetDetail action steps: %w", err)
+	}
+	defer rows.Close()
+
+	ap.Steps = []domain.RiskActionStep{}
+	for rows.Next() {
+		var st domain.RiskActionStep
+		if err := rows.Scan(&st.ID, &st.PlanID, &st.StepNo, &st.Description, &st.Status,
+			&st.CompletedDate, &st.CreatedOn, &st.UpdatedOn); err != nil {
+			return nil, fmt.Errorf("risk.GetDetail scan step: %w", err)
+		}
+		ap.Steps = append(ap.Steps, st)
+	}
+	return &ap, rows.Err()
+}
+
+func (r *riskRepo) detailAssessments(ctx context.Context, id int) ([]domain.RiskAssessment, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+assessmentColumns+`
+		 FROM risk_assessment ra JOIN risk_score rs ON rs.id = ra.score_id
+		 WHERE ra.risk_id = ? ORDER BY ra.created_at DESC`, id)
+	if err != nil {
+		return nil, fmt.Errorf("risk.GetDetail assessments: %w", err)
+	}
+	defer rows.Close()
+
+	out := []domain.RiskAssessment{}
+	for rows.Next() {
+		a, err := scanAssessment(rows)
+		if err != nil {
+			return nil, fmt.Errorf("risk.GetDetail scan assessment: %w", err)
+		}
+		out = append(out, *a)
+	}
+	return out, rows.Err()
 }

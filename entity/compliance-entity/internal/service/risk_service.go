@@ -287,3 +287,16 @@ func (s *riskService) NextSequenceNumber(ctx context.Context, sourceRegisterID i
 	}
 	return domain.NextSequenceResponse{NextSequenceNumber: n}, nil
 }
+
+// GetRiskDetail returns the fully-composed risk: every column, resolved names,
+// both scores, and the related references, action plan, steps and assessments.
+func (s *riskService) GetRiskDetail(ctx context.Context, id int) (domain.RiskDetail, error) {
+	if id <= 0 {
+		return domain.RiskDetail{}, &apierror.ValidationError{Msg: "risk id must be a positive integer"}
+	}
+	d, err := s.repo.GetRiskDetail(ctx, id)
+	if err != nil {
+		return domain.RiskDetail{}, err
+	}
+	return *d, nil
+}

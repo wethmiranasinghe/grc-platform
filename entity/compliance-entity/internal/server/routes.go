@@ -240,6 +240,7 @@ func NewRouter(db *sql.DB, store *storage.Service) http.Handler {
 	mux.HandleFunc("GET /risks/next-sequence-number", riskH.NextSequenceNumber)
 	mux.HandleFunc("POST /risks/search", riskH.SearchRisks)
 	mux.HandleFunc("GET /risks/{id}", riskH.GetRiskByID)
+	mux.HandleFunc("GET /risks/{id}/detail", riskH.GetRiskDetail)
 	mux.HandleFunc("POST /risks", riskH.CreateRisk)
 	mux.HandleFunc("PATCH /risks/{id}", riskH.UpdateRisk)
 
