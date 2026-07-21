@@ -32,6 +32,12 @@ type Config struct {
 	HREntity                HREntityConfig
 	CORSAllowedOrigin       string
 	AIValidation            AIValidationConfig
+	// RiskEntityRepos names the risk repositories served by the Compliance
+	// Entity, parsed from the comma-separated RISK_ENTITY_REPOS. Every repo not
+	// listed stays on direct MySQL, so the empty default preserves the
+	// pre-migration behaviour exactly. Temporary: removed once the risk module
+	// is fully migrated and internal/risk/repository/mysql is deleted.
+	RiskEntityRepos map[string]bool
 }
 
 // AIValidationConfig configures the fire-and-forget trigger to the AI Validation
@@ -147,7 +153,21 @@ func Load() (Config, error) {
 			AgentBaseURL: envOrDefault("AI_AGENT_BASE_URL", "http://localhost:8090"),
 			AgentAPIKey:  os.Getenv("AI_AGENT_API_KEY"),
 		},
+		RiskEntityRepos: parseNameSet(os.Getenv("RISK_ENTITY_REPOS")),
 	}, nil
+}
+
+// parseNameSet turns a comma-separated environment value into a lookup set,
+// ignoring empty and whitespace-only entries. An empty value yields an empty
+// (non-nil) set, so callers can index it without a nil check.
+func parseNameSet(v string) map[string]bool {
+	set := make(map[string]bool)
+	for _, name := range strings.Split(v, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			set[name] = true
+		}
+	}
+	return set
 }
 
 // loadIdPs builds the trusted-issuer list from the environment. IdP-1 (the GRC

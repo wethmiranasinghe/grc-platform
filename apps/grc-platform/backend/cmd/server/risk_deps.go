@@ -21,20 +21,42 @@ import (
 
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/hrentity"
 	riskhandler "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/risk/handler"
+	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/risk/repository"
+	riskentity "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/risk/repository/entity"
 	riskmysql "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/risk/repository/mysql"
 	riskservice "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/risk/service"
+	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/entityclient"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/file"
 )
 
 // buildRiskDeps wires the full Risk Hub dependency graph:
-// MySQL repositories → services → handler Deps struct.
+// repositories → services → handler Deps struct.
 // file is the shared Azure Blob service used by evidence uploads.
 // hrClient talks to the HR entity GraphQL service for employee lookups —
 // it is never backed by the GRC platform's own database.
-func buildRiskDeps(db *sql.DB, fileSvc *file.Service, hrClient *hrentity.Client) riskhandler.Deps {
+//
+// entityRepos names the repositories to serve from the Compliance Entity
+// instead of MySQL (see config.RiskEntityRepos). It is empty by default, which
+// keeps every repository on MySQL — the pre-migration behaviour. Both
+// implementations satisfy the same interface, so this choice is invisible to
+// the services and handlers below. Once every repository has been migrated,
+// this parameter, the MySQL package and the db argument all go away together.
+func buildRiskDeps(
+	db *sql.DB,
+	ec *entityclient.Client,
+	fileSvc *file.Service,
+	hrClient *hrentity.Client,
+	entityRepos map[string]bool,
+) riskhandler.Deps {
+	var teamRepo repository.TeamRepository
+	if entityRepos["team"] {
+		teamRepo = riskentity.NewTeamRepository(ec)
+	} else {
+		teamRepo = riskmysql.NewTeamRepository(db)
+	}
+
 	riskRepo := riskmysql.NewRiskRepository(db)
 	assessmentRepo := riskmysql.NewAssessmentRepository(db)
-	teamRepo := riskmysql.NewTeamRepository(db)
 	scoreRepo := riskmysql.NewRiskScoreRepository(db)
 	actionPlanRepo := riskmysql.NewActionPlanRepository(db)
 	evidenceRepo := riskmysql.NewRiskEvidenceRepository(db)
