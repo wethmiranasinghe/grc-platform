@@ -38,6 +38,7 @@
 package entity
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"testing"
@@ -97,4 +98,33 @@ func derefString(p *string) string {
 		return "<nil>"
 	}
 	return *p
+}
+
+// riskIDsForParity returns the risk ids the composite comparisons run over: one
+// per distinct workflow status, so the sample spans rejected, closed and
+// in-flight risks rather than whichever rows happen to be first.
+func riskIDsForParity(t *testing.T, db *sql.DB) []int {
+	t.Helper()
+	rows, err := db.QueryContext(context.Background(), `
+		SELECT MIN(id) FROM risk GROUP BY workflow_status ORDER BY MIN(id)`)
+	if err != nil {
+		t.Fatalf("select risk ids: %v", err)
+	}
+	defer rows.Close()
+
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan risk id: %v", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate risk ids: %v", err)
+	}
+	if len(ids) == 0 {
+		t.Fatal("no risks in the database — the comparison would prove nothing")
+	}
+	return ids
 }

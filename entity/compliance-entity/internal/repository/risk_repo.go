@@ -60,7 +60,10 @@ const riskSelectCols = `
   DATE_FORMAT(r.compliance_approval_date, '%Y-%m-%d'),
   r.git_issue_url, r.email_subject, r.remarks,
   r.risk_type, r.rejection_comment, r.rejection_stage,
-  DATE_FORMAT(r.owner_first_approved_at, '%Y-%m-%d'),
+  -- owner_first_approved_at is a datetime, not a date: it is stamped with NOW()
+  -- when a risk owner first approves. Formatting it as a plain date silently
+  -- discarded the time of day.
+  DATE_FORMAT(r.owner_first_approved_at, '%Y-%m-%dT%H:%i:%sZ'),
   r.created_by, r.updated_by,
   eff.risk_level AS effective_risk_level, eff.color_code AS effective_color_code`
 
@@ -826,7 +829,10 @@ func (r *riskRepo) detailReferences(ctx context.Context, id int) ([]domain.RiskC
 		SELECT scr.id, scr.name, scr.description, scr.created_at, scr.updated_at
 		FROM risk_compliance_reference rcr
 		JOIN risk_security_compliance_reference scr ON scr.id = rcr.reference_id
-		WHERE rcr.risk_id = ? ORDER BY scr.name`, id)
+		-- Ordered by reference id, which is the order MySQL returns for the
+		-- equivalent unordered query in the GRC backend. Ordering by name
+		-- instead would reorder the list a caller renders.
+		WHERE rcr.risk_id = ? ORDER BY rcr.reference_id`, id)
 	if err != nil {
 		return nil, fmt.Errorf("risk.GetDetail references: %w", err)
 	}
