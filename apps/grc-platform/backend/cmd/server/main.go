@@ -56,28 +56,31 @@ func main() {
 	}
 	defer sqlDB.Close()
 
-	// Load the role→privilege mapping from the database.
-	// When TokenValidatorEnabled=false (local dev), skip loading — HasPrivilege returns true for all checks.
-	// When TokenValidatorEnabled=true (production), load is required — exit if it fails.
-	var privStore *privilege.Store
-	if cfg.Auth.TokenValidatorEnabled {
-		loadCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		privStore, err = privilege.New(loadCtx, sqlDB)
-		if err != nil {
-			slog.Error("failed to load privilege mapping from database", "err", err)
-			os.Exit(1)
-		}
-		slog.Info("privilege store loaded")
-	}
-
 	// File operations go through the Compliance Entity (which holds the Azure key);
 	// the backend never talks to Azure directly.
 	fileSvc := file.NewService(cfg.ComplianceEntityBaseURL)
 
-	// Typed HTTP client to the Compliance Entity for audit data access (migrating
-	// the audit module off direct MySQL, stage by stage).
+	// Typed HTTP client to the Compliance Entity for data access (migrating the
+	// backend off direct MySQL, stage by stage).
 	entityCli := entityclient.New(cfg.ComplianceEntityBaseURL)
+
+	// Load the role→privilege mapping from the Compliance Entity. Built after
+	// entityCli because it needs it.
+	// When TokenValidatorEnabled=false (local dev), skip loading — HasPrivilege returns true for all checks.
+	// When TokenValidatorEnabled=true (production), load is required — exit if it fails.
+	// The timeout covers the bounded retry inside privilege.New, not a single
+	// attempt, so it must outlast attempts × backoff.
+	var privStore *privilege.Store
+	if cfg.Auth.TokenValidatorEnabled {
+		loadCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		privStore, err = privilege.New(loadCtx, entityCli)
+		if err != nil {
+			slog.Error("failed to load privilege mapping from the Compliance Entity", "err", err)
+			os.Exit(1)
+		}
+		slog.Info("privilege store loaded")
+	}
 
 	hrClient := hrentity.NewClient(cfg.HREntity.GraphQLURL, cfg.HREntity.TokenURL, cfg.HREntity.ClientID, cfg.HREntity.ClientSecret)
 
