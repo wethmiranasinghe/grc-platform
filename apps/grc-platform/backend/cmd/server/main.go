@@ -29,7 +29,6 @@ import (
 
 	audithandler "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/handler"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/config"
-	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/db"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/hrentity"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/middleware"
 	riskhandler "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/risk/handler"
@@ -48,13 +47,6 @@ func main() {
 		slog.Error("failed to load configuration", "err", err)
 		os.Exit(1)
 	}
-
-	sqlDB, err := db.Connect(cfg.DB.DSN)
-	if err != nil {
-		slog.Error("failed to connect to database", "err", err)
-		os.Exit(1)
-	}
-	defer sqlDB.Close()
 
 	// File operations go through the Compliance Entity (which holds the Azure key);
 	// the backend never talks to Azure directly.
@@ -96,7 +88,7 @@ func main() {
 	})
 
 	userhandler.RegisterRoutes(mux, userDeps)
-	riskhandler.RegisterRoutes(mux, buildRiskDeps(sqlDB, entityCli, fileSvc, hrClient, cfg.RiskEntityRepos))
+	riskhandler.RegisterRoutes(mux, buildRiskDeps(entityCli, fileSvc, hrClient))
 	audithandler.RegisterRoutes(mux, buildAuditDeps(fileSvc, entityCli, cfg.AIValidation))
 
 	// Scope guard runs just inside Auth: an evidence-app-scoped token (IdP-2) is
