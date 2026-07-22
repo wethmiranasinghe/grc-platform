@@ -20,7 +20,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 
+	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/apierror"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/user"
 )
 
@@ -82,7 +84,21 @@ func (r *repository) Upsert(ctx context.Context, email, displayName string) (*us
 	if err != nil {
 		return nil, fmt.Errorf("get upserted user id: %w", err)
 	}
-	return r.GetByID(ctx, int(id))
+	u, err := r.GetByID(ctx, int(id))
+	if err != nil {
+		return nil, err
+	}
+	if u == nil {
+		// The row exists (ON DUPLICATE KEY UPDATE fired) but GetByID's
+		// status != 'REMOVED' filter excluded it: email belongs to a
+		// removed account. Surface that instead of an apparent success
+		// with no user.
+		return nil, &apierror.Error{
+			StatusCode: http.StatusConflict,
+			Body:       "email belongs to a removed account",
+		}
+	}
+	return u, nil
 }
 
 func (r *repository) List(ctx context.Context) ([]*user.User, error) {
