@@ -29,6 +29,7 @@ type Config struct {
 	DB                      DBConfig
 	Auth                    AuthConfig
 	ComplianceEntityBaseURL string
+	HREntity                HREntityConfig
 	CORSAllowedOrigin       string
 	AIValidation            AIValidationConfig
 }
@@ -73,6 +74,19 @@ type AuthConfig struct {
 	TokenValidatorEnabled bool
 }
 
+// HREntityConfig holds the connection details for the WSO2 HR entity GraphQL
+// service (hr_entity), used to look up employees for the Risk module's
+// "Risk Identified By: Employee" field. Employee data is never stored in the
+// GRC platform's own database — it is fetched live on every search.
+// GraphQLURL points at the real service on Choreo in production, or a local
+// mock server during development; the code is identical either way.
+type HREntityConfig struct {
+	GraphQLURL   string
+	TokenURL     string
+	ClientID     string
+	ClientSecret string
+}
+
 // Load reads configuration from environment variables.
 // AUTH_JWKS_ENDPOINT, AUTH_ISSUER, and AUTH_AUDIENCE are only required when
 // AUTH_TOKEN_VALIDATOR_ENABLED is true (the default). They are not needed for
@@ -97,6 +111,23 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	hrEntityGraphQLURL, err := mustEnv("HR_ENTITY_GRAPHQL_URL")
+	if err != nil {
+		return Config{}, err
+	}
+	hrEntityTokenURL, err := mustEnv("HR_ENTITY_TOKEN_URL")
+	if err != nil {
+		return Config{}, err
+	}
+	hrEntityClientID, err := mustEnv("HR_ENTITY_CLIENT_ID")
+	if err != nil {
+		return Config{}, err
+	}
+	hrEntityClientSecret, err := mustEnv("HR_ENTITY_CLIENT_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		Port: envOrDefault("PORT", ":8080"),
 		DB: DBConfig{
@@ -104,7 +135,13 @@ func Load() (Config, error) {
 		},
 		Auth:                    authCfg,
 		ComplianceEntityBaseURL: envOrDefault("COMPLIANCE_ENTITY_BASE_URL", "http://localhost:8081"),
-		CORSAllowedOrigin:       envOrDefault("CORS_ALLOWED_ORIGIN", "http://localhost:3000"),
+		HREntity: HREntityConfig{
+			GraphQLURL:   hrEntityGraphQLURL,
+			TokenURL:     hrEntityTokenURL,
+			ClientID:     hrEntityClientID,
+			ClientSecret: hrEntityClientSecret,
+		},
+		CORSAllowedOrigin: envOrDefault("CORS_ALLOWED_ORIGIN", "http://localhost:3000"),
 		AIValidation: AIValidationConfig{
 			Enabled:      os.Getenv("AI_VALIDATION_ENABLED") == "true",
 			AgentBaseURL: envOrDefault("AI_AGENT_BASE_URL", "http://localhost:8090"),

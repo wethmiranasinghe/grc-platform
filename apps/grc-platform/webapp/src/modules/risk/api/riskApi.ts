@@ -48,6 +48,15 @@ export interface UserOption {
   id: number;
   display_name: string;
   email: string;
+  risk_team_id: number | null;
+}
+
+// EmployeeOption is a WSO2 employee returned by GET /api/v1/employees/search,
+// sourced live from the HR entity service — never from the GRC platform's
+// own database. Used only for the "Risk Identified By: Employee" field.
+export interface EmployeeOption {
+  name: string;
+  email: string;
 }
 
 export interface CreateRiskResponse {
@@ -132,7 +141,6 @@ export interface RiskDetail {
   risk_description: string;
   risk_identified_date: string | null;
   identified_by_type: string | null;
-  identified_by_user_id: number | null;
   identified_by_name: string | null;
   assigner_id: number;
   owner_id: number;
@@ -157,7 +165,6 @@ export interface RiskDetail {
   assignment_team_name: string;
   owner_name: string;
   assigner_name: string;
-  identified_by_user_name: string | null;
   compliance_approver_name: string | null;
   // Original rating from creation; immutable once a risk owner has approved
   // the risk. Only EditRiskDialog should read this — for display, use
@@ -199,8 +206,10 @@ export interface UpdateRiskPayload {
   risk_description: string;
   risk_identified_date?: string;
   identified_by_type?: string;
-  identified_by_user_id?: number;
   identified_by_name?: string;
+  // Required alongside identified_by_type "EMPLOYEE"; the backend re-resolves
+  // the name from this and ignores identified_by_name on its own.
+  identified_by_email?: string;
   assigner_id?: number;
   owner_id?: number;
   impact_description?: string;
@@ -262,9 +271,10 @@ export interface RegisterCertShare {
   percentage: number;
 }
 
-export interface RegisterLevelTreatmentCount {
+export interface RegisterStatusLevelCount {
+  bucket: string;
   risk_level: string;
-  treatment_strategy: string;
+  color_code: string;
   count: number;
 }
 
@@ -273,8 +283,7 @@ export interface RegisterAnalytics {
   register_name: string;
   open_count: number;
   heatmap: HeatmapCell[];
-  level_counts: RiskLevelCount[];
-  level_treatments: RegisterLevelTreatmentCount[];
+  status_levels: RegisterStatusLevelCount[];
 }
 
 export interface RepeatedRiskOccurrence {
@@ -292,7 +301,7 @@ export interface RepeatedComplianceRisk {
 export interface HighRiskItem {
   id: number;
   risk_code: string;
-  risk_description: string;
+  risk_title: string;
   register_name: string;
   owner_name: string;
   identified_date: string | null;
@@ -428,6 +437,34 @@ export async function fetchUsers(authFetch: AuthFetch): Promise<UserOption[]> {
   return handleResponse<UserOption[]>(res);
 }
 
+// searchEmployees looks up active employees by email substring, live
+// from the HR entity service (never the GRC platform's own database), for
+export async function searchEmployees(authFetch: AuthFetch, query: string): Promise<EmployeeOption[]> {
+  const params = new URLSearchParams({ q: query });
+  const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/employees/search?${params}`);
+  return handleResponse<EmployeeOption[]>(res);
+}
+
+// resolveUserByEmail links an HR entity employee to an internal user.id by
+// email, creating the user row on the fly if one doesn't exist yet (e.g. an
+// employee who's never logged into grc-platform). Used to let fields
+// like Action Owner assign any real employee, not just existing grc-platform
+// users, while still storing a proper FK rather than free text.
+//
+// Only email is sent: the backend looks the display name up from hr_entity
+// itself rather than trust one supplied here (the search result's `name` is
+// display-only and no longer part of this request) — see resolve.go.
+export async function resolveUserByEmail(
+  authFetch: AuthFetch,
+  employee: EmployeeOption,
+): Promise<UserOption> {
+  const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/users/resolve`, {
+    method: "POST",
+    body: JSON.stringify({ email: employee.email }),
+  });
+  return handleResponse<UserOption>(res);
+}
+
 export async function fetchNextSequenceID(
   authFetch: AuthFetch,
   sourceRegisterID: number,
@@ -455,9 +492,14 @@ export function buildCreateRiskPayload(data: AddRiskFormValues): Record<string, 
     risk_description: data.riskDescription,
     compliance_reference_ids: data.complianceReferences,
     identified_by_type: data.identifiedByType,
-    ...(data.identifiedByType === "EMPLOYEE"
-      ? { identified_by_user_id: data.identifiedByEmployee !== "" ? data.identifiedByEmployee : undefined }
-      : { identified_by_name: data.identifiedByName !== "" ? data.identifiedByName : undefined }),
+    identified_by_name: data.identifiedByName !== "" ? data.identifiedByName : undefined,
+    // Only meaningful (and only required by the backend) for EMPLOYEE — the
+    // server derives identified_by_name from this rather than trust the
+    // string above on its own.
+    identified_by_email:
+      data.identifiedByType === "EMPLOYEE" && data.identifiedByEmail !== ""
+        ? data.identifiedByEmail
+        : undefined,
     assigner_id: data.assignedBy !== "" ? data.assignedBy : undefined,
     risk_identified_date: toDateOnlyString(data.riskIdentifiedDate),
     likelihood: data.likelihood,
@@ -578,8 +620,12 @@ export async function resubmitRisk(authFetch: AuthFetch, id: number): Promise<vo
   return handleResponse<void>(res);
 }
 
-export async function fetchDashboard(authFetch: AuthFetch): Promise<DashboardSummary> {
-  const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/risks/dashboard`);
+export async function fetchDashboard(
+  authFetch: AuthFetch,
+  registerId?: number,
+): Promise<DashboardSummary> {
+  const qs = registerId ? `?register_id=${registerId}` : "";
+  const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/risks/dashboard${qs}`);
   return handleResponse<DashboardSummary>(res);
 }
 

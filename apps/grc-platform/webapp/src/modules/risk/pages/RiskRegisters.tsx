@@ -31,8 +31,6 @@ import {
   InputAdornment,
   InputLabel,
   MenuItem,
-  PageContent,
-  PageTitle,
   Paper,
   Select,
   Stack,
@@ -52,6 +50,7 @@ import {
 import { Eye, RefreshCw, Search, X } from "@wso2/oxygen-ui-icons-react";
 import type { JSX } from "react";
 import type * as React from "react";
+import { useSearchParams } from "react-router";
 import {
   approveRisk,
   cancelRisk,
@@ -82,6 +81,7 @@ import type {
 } from "../api/riskApi";
 import { useAuthApiClient } from "@hooks/useAuthApiClient";
 import { useRiskPrivileges } from "../hooks/useRiskPrivileges";
+import { darkCardSx } from "./cardStyles";
 import RiskDetailDrawer from "./risk-registers/RiskDetailDrawer";
 import RejectDialog from "./risk-registers/RejectDialog";
 import ReassessmentDialog from "./risk-registers/ReassessmentDialog";
@@ -246,7 +246,7 @@ function FilterBar({
         }}
       />
 
-      <FormControl size="small" sx={{ minWidth: 160 }}>
+      <FormControl sx={{ minWidth: 160 }}>
         <InputLabel>Register</InputLabel>
         <Select
           label="Register"
@@ -262,7 +262,7 @@ function FilterBar({
         </Select>
       </FormControl>
 
-      <FormControl size="small" sx={{ minWidth: 130 }}>
+      <FormControl sx={{ minWidth: 130 }}>
         <InputLabel>Level</InputLabel>
         <Select
           label="Level"
@@ -277,7 +277,7 @@ function FilterBar({
       </FormControl>
 
       {showRiskTypeFilter && (
-        <FormControl size="small" sx={{ minWidth: 150 }}>
+        <FormControl sx={{ minWidth: 150 }}>
           <InputLabel>Risk Type</InputLabel>
           <Select
             label="Risk Type"
@@ -292,7 +292,7 @@ function FilterBar({
       )}
 
       {showApprovedFilter && (
-        <FormControl size="small" sx={{ minWidth: 140 }}>
+        <FormControl sx={{ minWidth: 140 }}>
           <InputLabel>Status</InputLabel>
           <Select
             label="Status"
@@ -479,6 +479,28 @@ export default function RiskRegisters(): JSX.Element {
     setDrawerError("");
   };
 
+  // Deep link from the dashboard's High Severity Open Risks table
+  // (?riskId=N): auto-open that risk's drawer once, then strip the param so
+  // it doesn't re-trigger on drawer close or refresh.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const riskId = searchParams.get("riskId");
+    if (!riskId) return;
+    const id = Number(riskId);
+    if (Number.isSafeInteger(id) && id > 0) {
+      openDrawer(id);
+    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("riskId");
+        return next;
+      },
+      { replace: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const runAction = async (fn: () => Promise<void>, successMsg: string) => {
     if (actionInFlight) return;
     setActionInFlight(true);
@@ -588,10 +610,10 @@ export default function RiskRegisters(): JSX.Element {
   const colSpan = 8 + (showStatusCol ? 1 : 0) + (showRiskTypeCol ? 1 : 0);
 
   return (
-    <PageContent>
-      <PageTitle>
-        <PageTitle.Header>Risk Registers</PageTitle.Header>
-      </PageTitle>
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
+      <Typography variant="h4" fontWeight={700} sx={{ mb: 3 }}>
+        Risk Registers
+      </Typography>
 
       <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
         <Tabs value={activeTab} onChange={handleTabChange}>
@@ -601,7 +623,7 @@ export default function RiskRegisters(): JSX.Element {
         </Tabs>
       </Box>
 
-      <Box sx={{ mb: 2 }}>
+      <Paper variant="outlined" sx={{ p: 2, mb: 2, ...darkCardSx }}>
         <FilterBar
           filters={filters}
           teams={sourceTeams}
@@ -612,7 +634,7 @@ export default function RiskRegisters(): JSX.Element {
           onChange={setFilters}
           onRefresh={loadRisks}
         />
-      </Box>
+      </Paper>
 
       {actionError && (
         <Alert severity="error" onClose={() => setActionError("")} sx={{ mb: 2 }}>
@@ -625,7 +647,7 @@ export default function RiskRegisters(): JSX.Element {
         </Alert>
       )}
 
-      <Paper variant="outlined">
+      <Paper variant="outlined" sx={darkCardSx}>
         <TableContainer>
           <Table size="small">
             <TableHead>
@@ -895,6 +917,6 @@ export default function RiskRegisters(): JSX.Element {
           </Button>
         </DialogActions>
       </Dialog>
-    </PageContent>
+    </Box>
   );
 }

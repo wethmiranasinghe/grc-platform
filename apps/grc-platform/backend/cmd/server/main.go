@@ -30,6 +30,7 @@ import (
 	audithandler "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/handler"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/config"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/db"
+	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/hrentity"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/middleware"
 	riskhandler "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/risk/handler"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/entityclient"
@@ -78,8 +79,11 @@ func main() {
 	// the audit module off direct MySQL, stage by stage).
 	entityCli := entityclient.New(cfg.ComplianceEntityBaseURL)
 
+	hrClient := hrentity.NewClient(cfg.HREntity.GraphQLURL, cfg.HREntity.TokenURL, cfg.HREntity.ClientID, cfg.HREntity.ClientSecret)
+
 	userDeps := userhandler.Deps{
-		Users: usermysql.NewRepository(sqlDB),
+		Users:    usermysql.NewRepository(sqlDB),
+		HREntity: hrClient,
 	}
 
 	mux := http.NewServeMux()
@@ -89,21 +93,23 @@ func main() {
 	})
 
 	userhandler.RegisterRoutes(mux, userDeps)
-	riskhandler.RegisterRoutes(mux, buildRiskDeps(sqlDB, fileSvc))
+	riskhandler.RegisterRoutes(mux, buildRiskDeps(sqlDB, fileSvc, hrClient))
 	audithandler.RegisterRoutes(mux, buildAuditDeps(fileSvc, entityCli, cfg.AIValidation))
 
 	// Scope guard runs just inside Auth: an evidence-app-scoped token (IdP-2) is
 	// confined to /api/v1/evidence-app/* — 403 on any other route.
-	handler := middleware.CORS(cfg.CORSAllowedOrigin)(
-		middleware.CorrelationID(
-			middleware.Logger(
-				middleware.Auth(middleware.Config{
-					IdPs:                  cfg.Auth.IdPs,
-					ClockSkew:             cfg.Auth.ClockSkew,
-					TokenValidatorEnabled: cfg.Auth.TokenValidatorEnabled,
-					PrivilegeStore:        privStore,
-				})(
-					middleware.IssuerScope(mux),
+	handler := middleware.SecurityHeaders(
+		middleware.CORS(cfg.CORSAllowedOrigin)(
+			middleware.CorrelationID(
+				middleware.Logger(
+					middleware.Auth(middleware.Config{
+						IdPs:                  cfg.Auth.IdPs,
+						ClockSkew:             cfg.Auth.ClockSkew,
+						TokenValidatorEnabled: cfg.Auth.TokenValidatorEnabled,
+						PrivilegeStore:        privStore,
+					})(
+						middleware.IssuerScope(mux),
+					),
 				),
 			),
 		),
