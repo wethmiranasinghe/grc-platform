@@ -106,7 +106,10 @@ var allowedRiskTransitions = map[string][]string{
 		"PENDING_RISK_OWNER_APPROVAL", "PENDING_OWNER_COMPLETION_APPROVAL",
 		"PENDING_COMPLIANCE_REVIEW", "CANCELLED",
 	},
-	"ESCALATED": {"PENDING_MANAGEMENT_APPROVAL", "CANCELLED"},
+	// IN_REMEDIATION: the daily escalation job (internal/job) reverts a risk
+	// here once its linked MANAGEMENT action plan completes — see
+	// internal/service/risk_action_plan_service.go's completion cascade.
+	"ESCALATED": {"PENDING_MANAGEMENT_APPROVAL", "IN_REMEDIATION", "CANCELLED"},
 	"CLOSED":    {},
 	"CANCELLED": {},
 }

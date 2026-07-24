@@ -514,6 +514,10 @@ type SearchRisksRequest struct {
 	RiskLevelKeys []string `json:"riskLevelKeys"` // LOW | MEDIUM | HIGH
 	RiskTypeKeys  []string `json:"riskTypeKeys"`  // NEW | UPDATED
 	OwnerIDs      []int    `json:"ownerIds"`
+	// ActionOwnerID restricts to risks with at least one risk_action_plan row
+	// (STANDARD or MANAGEMENT) whose action_owner_id matches — how the Action
+	// Owner's risk list is scoped to only what they're assigned to.
+	ActionOwnerID *int `json:"actionOwnerId"`
 
 	// Submitted* bound created_at, Due* bound implementation_date. Dates are
 	// YYYY-MM-DD and inclusive at both ends.
@@ -1035,6 +1039,7 @@ type RiskActionPlan struct {
 	Status        string    `json:"status"` // PENDING | IN_PROGRESS | COMPLETED
 	CompletedDate *string   `json:"completedDate"`
 	PlanType      string    `json:"planType"` // STANDARD | MANAGEMENT
+	CreatedBy     *string   `json:"createdBy"`
 	CreatedOn     time.Time `json:"createdOn"`
 	UpdatedOn     time.Time `json:"updatedOn"`
 }
@@ -1059,6 +1064,14 @@ type UpdateRiskActionPlanRequest struct {
 // ListRiskActionPlansResponse is returned by GET /risks/{riskId}/action-plans.
 type ListRiskActionPlansResponse struct {
 	Plans []RiskActionPlan `json:"plans"`
+}
+
+// CompleteRiskActionPlanRequest is the payload for POST /action-plans/{planId}/complete.
+// Requires every one of the plan's steps to already be COMPLETED. For a
+// MANAGEMENT plan, completion also resolves the linked risk_escalation and
+// reverts the risk from ESCALATED back to IN_REMEDIATION.
+type CompleteRiskActionPlanRequest struct {
+	UpdatedBy string `json:"updatedBy"`
 }
 
 // =============================================================================
@@ -1234,12 +1247,13 @@ type ListRiskComplianceRefsResponse struct {
 // Risk Escalation (risk_escalation)
 // =============================================================================
 
-// RiskEscalation records an escalation of a risk to Management.
+// RiskEscalation records an escalation of a risk to Management. It is created
+// automatically by the daily overdue-risk job (see internal/job) — there is no
+// human-supplied target or reason; the trigger is always "IN_REMEDIATION past
+// implementation_date".
 type RiskEscalation struct {
 	ID                   int       `json:"id"`
 	RiskID               int       `json:"riskId"`
-	EscalatedTo          int       `json:"escalatedTo"`
-	Reason               *string   `json:"reason"`
 	NewTreatmentStrategy *string   `json:"newTreatmentStrategy"`
 	ActionPlanID         *int      `json:"actionPlanId"`
 	Decision             *string   `json:"decision"`
@@ -1252,11 +1266,16 @@ type RiskEscalation struct {
 
 // CreateRiskEscalationRequest is the payload for POST /risks/{riskId}/escalations.
 type CreateRiskEscalationRequest struct {
-	EscalatedTo          int     `json:"escalatedTo"`
-	Reason               *string `json:"reason"`
 	NewTreatmentStrategy *string `json:"newTreatmentStrategy"`
 	ActionPlanID         *int    `json:"actionPlanId"`
 	CreatedBy            string  `json:"createdBy"`
+}
+
+// EscalateRiskRequest is the payload for POST /risks/{riskId}/escalate — the
+// manual trigger a Compliance user clicks on an overdue IN_REMEDIATION risk,
+// as an alternative to waiting for the daily job to reach it.
+type EscalateRiskRequest struct {
+	CreatedBy string `json:"createdBy"`
 }
 
 // UpdateRiskEscalationRequest is the payload for PATCH /risks/{riskId}/escalations/{escalationId}.
@@ -1304,6 +1323,54 @@ type ListRiskChangeLogResponse struct {
 	Total   int             `json:"total"`
 	Limit   int             `json:"limit"`
 	Offset  int             `json:"offset"`
+}
+
+// =============================================================================
+// Risk Notification (risk_notification)
+// =============================================================================
+
+// RiskNotification is a single in-app/email notification for a risk-module
+// event. Only the write path (create) has a caller so far — the escalation
+// job and the action-plan-completion cascade. There is no notification-center
+// UI yet, so List/MarkRead exist as a real API surface but are unconsumed
+// until that UI is built, the same way risk_change_log's read side sat unused
+// before the changelog viewer existed.
+type RiskNotification struct {
+	ID          int64     `json:"id"`
+	RecipientID int       `json:"recipientId"`
+	RiskID      *int      `json:"riskId"`
+	Type        string    `json:"type"`    // REMINDER | ESCALATION | STATUS_CHANGE | APPROVAL | REASSESSMENT | REJECTION
+	Channel     string    `json:"channel"` // EMAIL | IN_APP
+	Message     string    `json:"message"`
+	IsRead      bool      `json:"isRead"`
+	CreatedBy   *string   `json:"createdBy"`
+	UpdatedBy   *string   `json:"updatedBy"`
+	CreatedOn   time.Time `json:"createdOn"`
+	UpdatedOn   time.Time `json:"updatedOn"`
+}
+
+// CreateRiskNotificationRequest is the payload for POST /notifications.
+// Channel defaults to IN_APP when omitted — no email transport exists yet
+// (see the email-service integration this is deliberately deferred to).
+type CreateRiskNotificationRequest struct {
+	RecipientID int     `json:"recipientId"`
+	RiskID      *int    `json:"riskId"`
+	Type        string  `json:"type"`
+	Channel     *string `json:"channel"`
+	Message     string  `json:"message"`
+	CreatedBy   string  `json:"createdBy"`
+}
+
+// MarkRiskNotificationReadRequest is the payload for PATCH /notifications/{id}/read.
+// RecipientID scopes the update so one recipient cannot mark another's notification read.
+type MarkRiskNotificationReadRequest struct {
+	RecipientID int    `json:"recipientId"`
+	UpdatedBy   string `json:"updatedBy"`
+}
+
+// ListRiskNotificationsResponse is returned by GET /users/{userId}/notifications.
+type ListRiskNotificationsResponse struct {
+	Notifications []RiskNotification `json:"notifications"`
 }
 
 // =============================================================================

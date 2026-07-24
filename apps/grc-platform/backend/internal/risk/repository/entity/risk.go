@@ -126,6 +126,7 @@ func (r *riskRepository) List(ctx context.Context, filter model.ListRisksFilter)
 		"dueFrom":            filter.DueFrom,
 		"dueTo":              filter.DueTo,
 		"dueOverdueOnly":     filter.DueOverdueOnly,
+		"actionOwnerId":      filter.ActionOwnerID,
 		"pagination":         map[string]int{"limit": filter.Limit, "offset": filter.Offset},
 	}
 

@@ -56,6 +56,16 @@ const (
 	ManageActionPlans     = "MANAGE_ACTION_PLANS"
 	ManageComplianceRefs  = "MANAGE_COMPLIANCE_REFS"
 	ViewAnalytics         = "VIEW_ANALYTICS"
+	// CreateManagementActionPlan gates creating a plan_type=MANAGEMENT action
+	// plan on an ESCALATED risk — distinct from ManageActionPlans (which
+	// Risk Assigners and Admin already hold for STANDARD plans) so Management
+	// can create MANAGEMENT plans without also being able to touch STANDARD ones.
+	CreateManagementActionPlan = "CREATE_MANAGEMENT_ACTION_PLAN_RISK"
+	// CompleteActionSteps gates viewing/completing the steps of a plan the
+	// caller is action_owner_id on — applies uniformly to STANDARD and
+	// MANAGEMENT plans; ownership is checked separately at the handler/service
+	// layer, this privilege alone does not grant access to every plan.
+	CompleteActionSteps = "COMPLETE_ACTION_STEPS_RISK"
 )
 
 // Audit Hub privilege names.

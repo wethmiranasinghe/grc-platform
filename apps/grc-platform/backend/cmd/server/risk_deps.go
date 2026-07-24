@@ -23,6 +23,7 @@ import (
 	riskservice "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/risk/service"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/entityclient"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/file"
+	userentity "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/user/entity"
 )
 
 // buildRiskDeps wires the full Risk Hub dependency graph:
@@ -41,12 +42,14 @@ func buildRiskDeps(
 	fileSvc *file.Service,
 	hrClient *hrentity.Client,
 ) riskhandler.Deps {
+	userRepo := userentity.NewRepository(ec)
+	actionPlanRepo := riskentity.NewActionPlanRepository(ec)
 	return riskhandler.Deps{
-		Risk:         riskservice.NewRiskService(riskentity.NewRiskRepository(ec)),
+		Risk:         riskservice.NewRiskService(riskentity.NewRiskRepository(ec), actionPlanRepo),
 		Assessment:   riskservice.NewRiskAssessmentService(riskentity.NewAssessmentRepository(ec)),
 		Team:         riskservice.NewTeamService(riskentity.NewTeamRepository(ec)),
 		Score:        riskservice.NewRiskScoreService(riskentity.NewRiskScoreRepository(ec)),
-		ActionPlan:   riskservice.NewActionPlanService(riskentity.NewActionPlanRepository(ec)),
+		ActionPlan:   riskservice.NewActionPlanService(actionPlanRepo, userRepo),
 		Evidence:     riskservice.NewEvidenceService(riskentity.NewRiskEvidenceRepository(ec), fileSvc),
 		Escalation:   riskservice.NewEscalationService(riskentity.NewEscalationRepository(ec)),
 		Notification: riskservice.NewNotificationService(riskentity.NewNotificationRepository(ec)),
@@ -54,5 +57,6 @@ func buildRiskDeps(
 		Analytics:    riskservice.NewAssembledAnalyticsService(riskentity.NewAnalyticsRepository(ec)),
 		Dashboard:    riskservice.NewAssembledDashboardService(riskentity.NewDashboardRepository(ec)),
 		Employee:     riskservice.NewEmployeeSearchService(hrClient),
+		Users:        userRepo,
 	}
 }

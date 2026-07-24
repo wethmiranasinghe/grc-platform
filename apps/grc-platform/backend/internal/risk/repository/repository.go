@@ -82,7 +82,11 @@ type ActionPlanRepository interface {
 	Update(ctx context.Context, planID int, req model.UpdateActionPlanRequest, updatedBy string) error
 	ListSteps(ctx context.Context, planID int) ([]*model.ActionPlanStep, error)
 	AddStep(ctx context.Context, planID, stepNo int, req model.AddActionPlanStepRequest, createdBy string) (*model.ActionPlanStep, error)
-	UpdateStep(ctx context.Context, stepID int, req model.UpdateActionPlanStepRequest, updatedBy string) error
+	UpdateStep(ctx context.Context, planID, stepID int, req model.UpdateActionPlanStepRequest, updatedBy string) error
+	// Complete marks a plan COMPLETED once every step is done; for a
+	// MANAGEMENT plan the entity also resolves its escalation and reverts the
+	// risk ESCALATED -> IN_REMEDIATION as part of the same call.
+	Complete(ctx context.Context, planID int, updatedBy string) (*model.ActionPlan, error)
 }
 
 // RiskEvidenceRepository is the data-access contract for risk evidence files.
@@ -95,6 +99,9 @@ type RiskEvidenceRepository interface {
 // EscalationRepository is the data-access contract for risk escalations.
 type EscalationRepository interface {
 	List(ctx context.Context, riskID int) ([]*model.Escalation, error)
+	// Escalate is the manual trigger — Compliance/Admin escalating an overdue
+	// IN_REMEDIATION risk on demand instead of waiting for the daily job.
+	Escalate(ctx context.Context, riskID int, createdBy string) (*model.Escalation, error)
 }
 
 // ChangelogRepository is the data-access contract for the risk audit trail.
