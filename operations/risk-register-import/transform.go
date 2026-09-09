@@ -36,8 +36,18 @@ func parseIntish(s string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("%q is not numeric", s)
 	}
+	// ParseFloat also accepts "Inf"/"NaN" and exponent/hex forms ("1e30"): those
+	// can clear the whole-number check below, and int(f) on a value that doesn't
+	// fit is implementation-defined garbage. Migration ID stores this result
+	// unbounded (sheet.go), so screen non-finite and out-of-range here.
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0, fmt.Errorf("%q is not a finite number", s)
+	}
 	if f != math.Trunc(f) {
 		return 0, fmt.Errorf("%q is not a whole number", s)
+	}
+	if intLimit := math.Ldexp(1, strconv.IntSize-1); f < -intLimit || f >= intLimit {
+		return 0, fmt.Errorf("%q is out of range for an integer", s)
 	}
 	return int(f), nil
 }

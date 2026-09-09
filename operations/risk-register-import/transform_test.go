@@ -25,9 +25,11 @@ func TestParseIntish(t *testing.T) {
 			t.Errorf("parseIntish(%q) = (%d, %v), want (%d, nil)", in, got, err, want)
 		}
 	}
-	for _, in := range []string{"", "abc", "2025.5", "3,000", "Q1"} {
-		if _, err := parseIntish(in); err == nil {
-			t.Errorf("parseIntish(%q): want error", in)
+	// ParseFloat accepts these; each must still be an error here (int(f) on a
+	// non-finite or out-of-range value is implementation-defined garbage).
+	for _, in := range []string{"", "abc", "2025.5", "3,000", "Q1", "Inf", "-Inf", "NaN", "1e30", "-1e30", "0x1p64"} {
+		if got, err := parseIntish(in); err == nil {
+			t.Errorf("parseIntish(%q) = (%d, nil): want error", in, got)
 		}
 	}
 }
