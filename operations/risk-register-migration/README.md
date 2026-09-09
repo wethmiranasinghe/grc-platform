@@ -1,4 +1,4 @@
-# risk-register-import
+# risk-register-migration
 
 One-time migration that loads the historical risk register into the platform
 database by driving the **compliance-entity HTTP API**. Deployed as a **Choreo
@@ -126,7 +126,7 @@ curl -s localhost:8080/risk/scores | head -c 200
 
 # 4. this tool. Copy .env.example to .env, fill in COMPLIANCE_ENTITY_BASE_URL
 # plus whichever identity path you picked above.
-cd ../../operations/risk-register-import
+cd ../../operations/risk-register-migration
 set -a && source .env && set +a
 IN=<path-to-your-prepared-register>.csv
 
