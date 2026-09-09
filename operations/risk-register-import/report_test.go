@@ -24,9 +24,9 @@ import (
 func TestReportEmit_Narrative(t *testing.T) {
 	r := NewReport()
 	r.Add(
-		Finding{MigrationID: 1, CSVRow: 2, Severity: SevReject, Failure: "Risk Owner", Value: "ghost@wso2.com", Detail: `"ghost@wso2.com" is not in the SCIM directory`},
-		Finding{MigrationID: 3, CSVRow: 4, Severity: SevReject, Failure: "Risk Owner", Value: "Ghost@wso2.com"},
-		Finding{MigrationID: 5, CSVRow: 6, Severity: SevReject, Failure: "Action Owner", Value: "nobody@wso2.com"},
+		Finding{MigrationID: 1, CSVRow: 2, Severity: SevReject, Failure: "Risk Owner", Value: "user1@wso2.com", Detail: `"user1@wso2.com" is not in the SCIM directory`},
+		Finding{MigrationID: 3, CSVRow: 4, Severity: SevReject, Failure: "Risk Owner", Value: "User1@wso2.com"},
+		Finding{MigrationID: 5, CSVRow: 6, Severity: SevReject, Failure: "Action Owner", Value: "user2@wso2.com"},
 		Finding{MigrationID: 7, CSVRow: 8, Severity: SevWarn, Failure: "Git Issue URL"},
 		Finding{MigrationID: 9, CSVRow: 10, Severity: SevWarn, Failure: "Git Issue URL"},
 	)
@@ -51,9 +51,9 @@ func TestReportEmit_Narrative(t *testing.T) {
 		"findings by code:",
 		"2  REJECT  Risk Owner",
 		"2  WARN  Git Issue URL",
-		"unresolved people (2):", // ghost@ (case-folded) + nobody@
-		"ghost@wso2.com",
-		"nobody@wso2.com",
+		"unresolved people (2):", // user1@ (case-folded) + user2@
+		"user1@wso2.com",
+		"user2@wso2.com",
 		"suppressing escalations seeded for Migration IDs: [1 2] (2)",
 		"grants written: 3",
 		"migrated by bucket: CLOSED=1 IN_REMEDIATION=2",
@@ -63,7 +63,7 @@ func TestReportEmit_Narrative(t *testing.T) {
 			t.Errorf("report missing %q\n---\n%s", m, out)
 		}
 	}
-	if strings.Contains(out, "Ghost@wso2.com") {
+	if strings.Contains(out, "User1@wso2.com") {
 		t.Errorf("unresolved-people list should be case-folded and de-duped:\n%s", out)
 	}
 }

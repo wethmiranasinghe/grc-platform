@@ -21,31 +21,47 @@ import (
 	"time"
 )
 
-func TestEnvBool_WriteGateDefaultsToDryRun(t *testing.T) {
-	// DRY_RUN defaults true — the tool must be told explicitly to write.
+func TestParseBoolEnv_WriteGateDefaultsToDryRun(t *testing.T) {
+	// DRY_RUN defaults true — the tool must be told explicitly to write. An
+	// unrecognized value is an error, not a silent flip to write mode: a typo
+	// must fail loud, never fail toward the destructive branch.
 	cases := map[string]struct {
-		set  bool
-		val  string
-		def  bool
-		want bool
+		set     bool
+		val     string
+		def     bool
+		want    bool
+		wantErr bool
 	}{
-		"unset keeps default true":  {false, "", true, true},
-		"unset keeps default false": {false, "", false, false},
-		"true":                      {true, "true", true, true},
-		"TRUE mixed case":           {true, "TRUE", true, true},
-		"1":                         {true, "1", true, true},
-		"yes":                       {true, "yes", true, true},
-		"false":                     {true, "false", true, false},
-		"anything else is false":    {true, "maybe", true, false},
-		"empty string is default":   {true, "", true, true},
+		"unset keeps default true":  {set: false, def: true, want: true},
+		"unset keeps default false": {set: false, def: false, want: false},
+		"true":                      {set: true, val: "true", def: true, want: true},
+		"TRUE mixed case":           {set: true, val: "TRUE", def: true, want: true},
+		"1":                         {set: true, val: "1", def: true, want: true},
+		"yes":                       {set: true, val: "yes", def: true, want: true},
+		"false":                     {set: true, val: "false", def: true, want: false},
+		"0":                         {set: true, val: "0", def: true, want: false},
+		"no":                        {set: true, val: "no", def: true, want: false},
+		"empty string is default":   {set: true, val: "", def: true, want: true},
+		"typo errors, not false":    {set: true, val: "flase", def: true, wantErr: true},
+		"garbage errors, not false": {set: true, val: "maybe", def: true, wantErr: true},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			if tc.set {
 				t.Setenv("DRY_RUN_TEST_KEY", tc.val)
 			}
-			if got := envBool("DRY_RUN_TEST_KEY", tc.def); got != tc.want {
-				t.Errorf("envBool(%q, %v) = %v, want %v", tc.val, tc.def, got, tc.want)
+			got, err := parseBoolEnv("DRY_RUN_TEST_KEY", tc.def)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("parseBoolEnv(%q) = %v, <nil>, want an error", tc.val, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseBoolEnv(%q) unexpected error: %v", tc.val, err)
+			}
+			if got != tc.want {
+				t.Errorf("parseBoolEnv(%q, %v) = %v, want %v", tc.val, tc.def, got, tc.want)
 			}
 		})
 	}

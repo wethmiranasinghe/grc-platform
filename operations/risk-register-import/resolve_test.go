@@ -25,12 +25,12 @@ import (
 )
 
 var directorySnapshot = []DirectoryUser{
-	{UUID: "uuid-assigner", Email: "nimali.re@wso2.com"},
-	{UUID: "uuid-owner", Email: "kasun.pe@wso2.com"},
-	{UUID: "uuid-mgr", Email: "asela.ja@wso2.com"},
-	{UUID: "uuid-action", Email: "tharindu.se@wso2.com"},
-	{UUID: "uuid-dup-a", Email: "twin@wso2.com"},
-	{UUID: "uuid-dup-b", Email: "twin@wso2.com"}, // same email, different uuid -> ambiguous
+	{UUID: "uuid-assigner", Email: "user1@wso2.com"},
+	{UUID: "uuid-owner", Email: "user2@wso2.com"},
+	{UUID: "uuid-mgr", Email: "user3@wso2.com"},
+	{UUID: "uuid-action", Email: "user4@wso2.com"},
+	{UUID: "uuid-dup-a", Email: "user5@wso2.com"},
+	{UUID: "uuid-dup-b", Email: "user5@wso2.com"}, // same email, different uuid -> ambiguous
 }
 
 func resolvableRow(migID int, status string) Row {
@@ -38,9 +38,9 @@ func resolvableRow(migID int, status string) Row {
 		MigrationID:             migID,
 		CSVLine:                 migID + 1,
 		RiskTitle:               "R",
-		AssignerEmail:           "nimali.re@wso2.com",
-		OwnerEmail:              "kasun.pe@wso2.com",
-		ManagementApproverEmail: "asela.ja@wso2.com",
+		AssignerEmail:           "user1@wso2.com",
+		OwnerEmail:              "user2@wso2.com",
+		ManagementApproverEmail: "user3@wso2.com",
 		WorkflowStatus:          status,
 	}
 }
@@ -49,13 +49,13 @@ func TestResolverBuild_MarksAmbiguousEmail(t *testing.T) {
 	r := NewResolver(nil, directorySnapshot, true)
 	r.Build()
 
-	if r.uuidByEmail["nimali.re@wso2.com"] != "uuid-assigner" {
+	if r.uuidByEmail["user1@wso2.com"] != "uuid-assigner" {
 		t.Errorf("clean email not indexed: %v", r.uuidByEmail)
 	}
-	if !r.ambiguous["twin@wso2.com"] {
+	if !r.ambiguous["user5@wso2.com"] {
 		t.Errorf("duplicate email not marked ambiguous: %v", r.ambiguous)
 	}
-	if _, ok, _ := r.userID(context.Background(), "twin@wso2.com"); ok {
+	if _, ok, _ := r.userID(context.Background(), "user5@wso2.com"); ok {
 		t.Errorf("ambiguous email must not resolve")
 	}
 }
@@ -69,24 +69,24 @@ func TestResolverApply_DryRun(t *testing.T) {
 		func() Row { x := resolvableRow(2, "CLOSED"); return x }(), // action owner missing -> OK (nullable)
 		func() Row {
 			x := resolvableRow(3, "IN_REMEDIATION")
-			x.ActionOwnerEmail = "tharindu.se@wso2.com"
+			x.ActionOwnerEmail = "user4@wso2.com"
 			return x
 		}(),
 		func() Row {
 			x := resolvableRow(4, "IN_REMEDIATION")
-			x.ActionOwnerEmail = "tharindu.se@wso2.com"
-			x.OwnerEmail = "ghost@wso2.com" // not in directory -> REJECT
+			x.ActionOwnerEmail = "user4@wso2.com"
+			x.OwnerEmail = "user6@wso2.com" // not in directory -> REJECT
 			return x
 		}(),
 		func() Row {
 			x := resolvableRow(5, "CLOSED")
-			x.ActionOwnerEmail = "ghost@wso2.com" // not in directory, CLOSED -> WARN
+			x.ActionOwnerEmail = "user6@wso2.com" // not in directory, CLOSED -> WARN
 			return x
 		}(),
 		func() Row {
 			x := resolvableRow(6, "IN_REMEDIATION")
-			x.ActionOwnerEmail = "tharindu.se@wso2.com"
-			x.AssignerEmail = "twin@wso2.com" // ambiguous -> REJECT
+			x.ActionOwnerEmail = "user4@wso2.com"
+			x.AssignerEmail = "user5@wso2.com" // ambiguous -> REJECT
 			return x
 		}(),
 	}
@@ -165,7 +165,7 @@ func TestResolverApply_RealRunProvisionsAndFillsIDs(t *testing.T) {
 	r.Build()
 
 	row := resolvableRow(1, "IN_REMEDIATION")
-	row.ActionOwnerEmail = "tharindu.se@wso2.com"
+	row.ActionOwnerEmail = "user4@wso2.com"
 	rows := []Row{row}
 
 	fs, err := r.Apply(context.Background(), rows)

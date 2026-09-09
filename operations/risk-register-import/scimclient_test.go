@@ -108,11 +108,11 @@ func TestSCIMListUsersByDomain_PagesAndMaps(t *testing.T) {
 		total: 3,
 		pages: map[int]string{
 			1: `[
-				{"id":"uuid-1","userName":"DEFAULT/nimali.re@wso2.com","name":{"givenName":"Nimali","familyName":"Re"}},
-				{"id":"uuid-2","userName":"kasun.pe@wso2.com","name":{"givenName":"Kasun","familyName":"Pe"}}
+				{"id":"uuid-1","userName":"DEFAULT/user1@wso2.com","name":{"givenName":"User","familyName":"One"}},
+				{"id":"uuid-2","userName":"user2@wso2.com","name":{"givenName":"User","familyName":"Two"}}
 			]`,
 			3: `[
-				{"id":"uuid-3","userName":"tharindu.se@wso2.com","name":{"givenName":"Tharindu","familyName":""}}
+				{"id":"uuid-3","userName":"user3@wso2.com","name":{"givenName":"UserThree","familyName":""}}
 			]`,
 		},
 	}
@@ -125,10 +125,10 @@ func TestSCIMListUsersByDomain_PagesAndMaps(t *testing.T) {
 	if len(users) != 3 {
 		t.Fatalf("got %d users, want 3: %+v", len(users), users)
 	}
-	if users[0].UUID != "uuid-1" || users[0].Email != "nimali.re@wso2.com" || users[0].DisplayName != "Nimali Re" {
+	if users[0].UUID != "uuid-1" || users[0].Email != "user1@wso2.com" || users[0].DisplayName != "User One" {
 		t.Errorf("user[0] = %+v (userstore prefix should be stripped)", users[0])
 	}
-	if users[2].UUID != "uuid-3" || users[2].DisplayName != "Tharindu" {
+	if users[2].UUID != "uuid-3" || users[2].DisplayName != "UserThree" {
 		t.Errorf("user[2] = %+v (name join should tolerate a missing family name)", users[2])
 	}
 	if stub.searchHits != 2 {
@@ -145,7 +145,7 @@ func TestSCIMListUsersByDomain_SinglePageStops(t *testing.T) {
 		org:   "wso2",
 		total: 1,
 		pages: map[int]string{
-			1: `[{"id":"u","userName":"solo@wso2.com","name":{"givenName":"Solo","familyName":"Dev"}}]`,
+			1: `[{"id":"u","userName":"user4@wso2.com","name":{"givenName":"User","familyName":"Four"}}]`,
 		},
 	}
 	c := newTestSCIMClient(t, stub)

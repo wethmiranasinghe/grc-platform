@@ -253,7 +253,7 @@ func (c *SCIMClient) searchUsersPage(ctx context.Context, filter string, startIn
 }
 
 // stripUserstoreDomain removes a "DEFAULT/" style userstore prefix SCIM entries
-// can carry (e.g. "DEFAULT/jane@wso2.com" -> "jane@wso2.com"); falls back to
+// can carry (e.g. "DEFAULT/user1@wso2.com" -> "user1@wso2.com"); falls back to
 // the raw value when there is no "/".
 func stripUserstoreDomain(s string) string {
 	if i := strings.LastIndex(s, "/"); i != -1 {

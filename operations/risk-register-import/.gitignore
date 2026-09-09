@@ -1,5 +1,8 @@
 /risk-register-import
 
+# Local environment — never commit real credentials.
+.env
+
 # Local end-to-end testing — never commit real register data or snapshots.
 /local/
 *.local.csv

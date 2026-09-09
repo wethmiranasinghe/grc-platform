@@ -72,14 +72,14 @@ func fixtureRefData(t *testing.T) RefData {
 }
 
 // fixtureSnapshot maps every email in testdata/risks.csv to a uuid — except
-// nobody@wso2.com (row 6), which is deliberately absent.
+// user6@wso2.com (row 6), which is deliberately absent.
 func fixtureSnapshot() []DirectoryUser {
 	return []DirectoryUser{
-		{UUID: "uuid-ganguli", Email: "ganguli.pi@wso2.com"},
-		{UUID: "uuid-nikolya", Email: "nikolya.fe@wso2.com"},
-		{UUID: "uuid-tharushi", Email: "tharushi.pu@wso2.com"},
-		{UUID: "uuid-asela", Email: "asela.ja@wso2.com"},
-		{UUID: "uuid-atheeq", Email: "atheeq.ra@wso2.com"},
+		{UUID: "uuid-user1", Email: "user1@wso2.com"},
+		{UUID: "uuid-user2", Email: "user2@wso2.com"},
+		{UUID: "uuid-user3", Email: "user3@wso2.com"},
+		{UUID: "uuid-user4", Email: "user4@wso2.com"},
+		{UUID: "uuid-user5", Email: "user5@wso2.com"},
 	}
 }
 
@@ -329,7 +329,7 @@ func TestFixture_Parse(t *testing.T) {
 	if len(r1.ActionSteps) != 2 {
 		t.Errorf("row 1 action steps (embedded newline): %v", r1.ActionSteps)
 	}
-	if r1.OwnerEmail != "tharushi.pu@wso2.com" || r1.AssignerEmail != "ganguli.pi@wso2.com" {
+	if r1.OwnerEmail != "user3@wso2.com" || r1.AssignerEmail != "user1@wso2.com" {
 		t.Errorf("row 1 emails: owner=%q assigner=%q", r1.OwnerEmail, r1.AssignerEmail)
 	}
 

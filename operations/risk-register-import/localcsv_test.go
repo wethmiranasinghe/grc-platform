@@ -24,21 +24,24 @@ import (
 	"testing"
 )
 
-// localTestCSV is a byte-for-byte copy of
+// localTestCSV mirrors the structure of
 // "Risk_Test_Full.xlsx - New Risk Form Structure.csv" in the planning-docs area
-// — the hand-cleaned register used for a local -scim-snapshot run. This test is
-// the regression lock that it stays fully valid: 5 rows, zero REJECTs, the
-// dates / aliases / buckets all landing where the runbook says.
+// — the hand-cleaned register used for a local -scim-snapshot run — but with
+// synthetic person emails (never a real colleague's address; see
+// snapshotFixtureUsers) in place of whichever two real people that untracked
+// file is pointed at for an actual local run. This test is the regression
+// lock that the shape stays fully valid: 5 rows, zero REJECTs, the dates /
+// aliases / buckets all landing where the runbook says.
 const localTestCSV = `Year,Quarter,Source Register,Risk Title,Risk Description,Security Compliance Reference ,Risk Category,Risk Identified By,Select Employee/ Name of External Person/ Tool,Risk Identified Date,Risk Assigned To,Likelihood,Impact,Impact Description,Implementation Date,Reassessment Date,Assignment Team,Risk Owner,Management Approver,Action Owner,Action Plan Description,Action Steps,Treatment Strategy,Progress,Git Issue URL,Email Subject,Remarks,Exidence Attachments,Workflow Status ,Migration ID
-2025,Q3,Asgardeo,Supplier contract renewal delay,Delay in renewing supplier contracts may cause service interruption and unplanned cost increases.,HIPPA,Access Control & Credentials,Employee,Tharushi Pushpakumara,"January 10, 2025",ganguli.pi@wso2.com,3,2,Service interruption and unplanned cost increases for the organisation.,"June 30, 2025",30th Sep 2025,Business,tharushi.pu@wso2.com,asela.ja@wso2.com,atheeq.ra@wso2.com,Targeting completion by end of 2025,"Action Item -1
+2025,Q3,Asgardeo,Supplier contract renewal delay,Delay in renewing supplier contracts may cause service interruption and unplanned cost increases.,HIPPA,Access Control & Credentials,Employee,User One,"January 10, 2025",user1@wso2.com,3,2,Service interruption and unplanned cost increases for the organisation.,"June 30, 2025",30th Sep 2025,Business,user2@wso2.com,user1@wso2.com,user2@wso2.com,Targeting completion by end of 2025,"Action Item -1
 Action 2",Accept,WIP,https://github.com/wso2/product-risk/issues/101,Risk identification on threat models,Raised during the Q3 threat-model review.,,IN_REMEDIATION,1
-2025,Q3,Asgardeo,Employee security training gap,Absence of regular security awareness training increases susceptibility to phishing and social engineering.,BUSINESS,"Logging, Monitoring & Detection",Employee,Asela Jayatilleke,"February 5, 2025",nikolya.fe@wso2.com,2,3,"Higher susceptibility to phishing, social engineering and insider threats.","September 30, 2025",31st Dec 2025,Digi Ops,tharushi.pu@wso2.com,asela.ja@wso2.com,atheeq.ra@wso2.com,Targeting completion by end of 2026,"Action Item -1
+2025,Q3,Asgardeo,Employee security training gap,Absence of regular security awareness training increases susceptibility to phishing and social engineering.,BUSINESS,"Logging, Monitoring & Detection",Employee,User Two,"February 5, 2025",user2@wso2.com,2,3,"Higher susceptibility to phishing, social engineering and insider threats.","September 30, 2025",31st Dec 2025,Digi Ops,user1@wso2.com,user2@wso2.com,user1@wso2.com,Targeting completion by end of 2026,"Action Item -1
 Action 2",Transfer,WIP,,Hackathon findings - ABC,,,CLOSED,2
-2025,Q4,Choreo,Business continuity plan not tested,Without regular BCP drills the organisation cannot validate critical operations during a disruption.,ISO,Access Control & Credentials,Employee,Atheeq Rahman,"March 15, 2025",nikolya.fe@wso2.com,3,2,Cannot validate the ability to maintain critical operations during a major incident.,2025-12-31,30th Jun 2026,Choreo,tharushi.pu@wso2.com,asela.ja@wso2.com,atheeq.ra@wso2.com,Targeting completion by end of 2027,"Action Item -1
+2025,Q4,Choreo,Business continuity plan not tested,Without regular BCP drills the organisation cannot validate critical operations during a disruption.,ISO,Access Control & Credentials,Employee,User Two,"March 15, 2025",user2@wso2.com,3,2,Cannot validate the ability to maintain critical operations during a major incident.,2025-12-31,30th Jun 2026,Choreo,user1@wso2.com,user1@wso2.com,user2@wso2.com,Targeting completion by end of 2027,"Action Item -1
 Action 2",Remediate,WIP,,Risk identification on threat models,,,IN_REMEDIATION,3
-2026,Q1,Clever Care,Regulatory data localisation requirement,Emerging regulations may mandate that customer data be stored within specific geographic regions.,BUSINESS,Data Exposure & Privacy (PII),Employee,Asela Jayatilleke,"April 1, 2025",ganguli.pi@wso2.com,3,1,Significant infrastructure changes and additional compliance effort.,"March 31, 2026",30th Jun 2026,Digi Ops,tharushi.pu@wso2.com,asela.ja@wso2.com,atheeq.ra@wso2.com,Targeting completion by end of 2028,"Action Item -1
+2026,Q1,Clever Care,Regulatory data localisation requirement,Emerging regulations may mandate that customer data be stored within specific geographic regions.,BUSINESS,Data Exposure & Privacy (PII),Employee,User One,"April 1, 2025",user1@wso2.com,3,1,Significant infrastructure changes and additional compliance effort.,"March 31, 2026",30th Jun 2026,Digi Ops,user2@wso2.com,user2@wso2.com,user1@wso2.com,Targeting completion by end of 2028,"Action Item -1
 Action 2",Avoid,WIP,,Hackathon findings - ABC,,,CLOSED,4
-2026,Q3,Business,Payment gateway single point of failure,Exclusive reliance on a single payment gateway provider risks halting revenue collection on any outage.,SOC2,Process & Documentation Gaps,Employee,Tharushi Pushpakumara,"May 20, 2025",nikolya.fe@wso2.com,3,3,Any provider downtime directly halts revenue collection and customer transactions.,2025-10-31,31st Dec 2025,Asgardeo,tharushi.pu@wso2.com,asela.ja@wso2.com,atheeq.ra@wso2.com,Targeting completion by end of 2029,"Action Item -1
+2026,Q3,Business,Payment gateway single point of failure,Exclusive reliance on a single payment gateway provider risks halting revenue collection on any outage.,SOC2,Process & Documentation Gaps,Employee,User One,"May 20, 2025",user1@wso2.com,3,3,Any provider downtime directly halts revenue collection and customer transactions.,2025-10-31,31st Dec 2025,Asgardeo,user2@wso2.com,user1@wso2.com,user2@wso2.com,Targeting completion by end of 2029,"Action Item -1
 Action 2",Accept,WIP,,External report,,,IN_REMEDIATION,5
 `
 
@@ -97,12 +100,11 @@ func TestLocalTestCSV_ParsesCleanAndFullyResolves(t *testing.T) {
 }
 
 func snapshotFixtureUsers() []DirectoryUser {
+	// The two synthetic people localTestCSV uses, with placeholder uuids.
+	// Resolution only cares that each email maps to exactly one uuid.
 	return []DirectoryUser{
-		{Email: "ganguli.pi@wso2.com", UUID: "11111111-1111-4111-8111-111111111111"},
-		{Email: "nikolya.fe@wso2.com", UUID: "22222222-2222-4222-8222-222222222222"},
-		{Email: "tharushi.pu@wso2.com", UUID: "33333333-3333-4333-8333-333333333333"},
-		{Email: "asela.ja@wso2.com", UUID: "44444444-4444-4444-8444-444444444444"},
-		{Email: "atheeq.ra@wso2.com", UUID: "55555555-5555-4555-8555-555555555555"},
+		{Email: "user1@wso2.com", UUID: "11111111-1111-4111-8111-111111111111"},
+		{Email: "user2@wso2.com", UUID: "22222222-2222-4222-8222-222222222222"},
 	}
 }
 
@@ -110,9 +112,9 @@ func TestLoadSnapshotFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "snap.csv")
 	body := "email,uuid\n" +
-		"Alice.Ex@wso2.com , uuid-alice \n" +
+		"User1@wso2.com , uuid-user1 \n" +
 		"\n" + // blank line tolerated
-		"bob.ex@wso2.com,uuid-bob,ignored-trailing-column\n"
+		"user2@wso2.com,uuid-user2,ignored-trailing-column\n"
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -124,10 +126,10 @@ func TestLoadSnapshotFile(t *testing.T) {
 	if len(users) != 2 {
 		t.Fatalf("got %d users, want 2 (header + blank line skipped): %+v", len(users), users)
 	}
-	if users[0].Email != "alice.ex@wso2.com" || users[0].UUID != "uuid-alice" {
+	if users[0].Email != "user1@wso2.com" || users[0].UUID != "uuid-user1" {
 		t.Errorf("row 0 not trimmed/lowercased: %+v", users[0])
 	}
-	if users[1].Email != "bob.ex@wso2.com" || users[1].UUID != "uuid-bob" {
+	if users[1].Email != "user2@wso2.com" || users[1].UUID != "uuid-user2" {
 		t.Errorf("row 1: %+v", users[1])
 	}
 

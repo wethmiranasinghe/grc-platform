@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -567,5 +568,5 @@ func ptrOrNil(s string) *string {
 }
 
 func naturalKey(title string, sourceRegID, year int, quarter string) string {
-	return strings.TrimSpace(title) + "\x00" + itoa(sourceRegID) + "\x00" + itoa(year) + "\x00" + quarter
+	return strings.TrimSpace(title) + "\x00" + strconv.Itoa(sourceRegID) + "\x00" + strconv.Itoa(year) + "\x00" + quarter
 }

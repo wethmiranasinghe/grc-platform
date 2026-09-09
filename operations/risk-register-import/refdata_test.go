@@ -69,9 +69,6 @@ func TestBuildRefData_HappyPath(t *testing.T) {
 	if rd.ComplianceIDByName["ISO"] != 2 || rd.ComplianceIDByName["SOC2"] != 5 {
 		t.Errorf("compliance ref keyed by uppercased name: %+v", rd.ComplianceIDByName)
 	}
-	if rd.ScoreIDByLI[[2]int{3, 3}] != 7 || rd.ScoreIDByLI[[2]int{1, 2}] != 4 {
-		t.Errorf("score keyed by [likelihood,impact]: %+v", rd.ScoreIDByLI)
-	}
 	if rd.RoleIDByName[roleRiskOwner] != 10 || rd.RoleIDByName[roleRiskAssigner] != 11 || rd.RoleIDByName[roleRiskManagement] != 12 {
 		t.Errorf("RoleIDByName: %+v", rd.RoleIDByName)
 	}
@@ -176,7 +173,7 @@ func TestPreflight_HappyPath(t *testing.T) {
 	t.Cleanup(esrv.Close)
 
 	stub := &scimStub{t: t, org: "wso2", total: 1, pages: map[int]string{
-		1: `[{"id":"uuid-1","userName":"nimali.re@wso2.com","name":{"givenName":"Nimali","familyName":"Re"}}]`,
+		1: `[{"id":"uuid-1","userName":"user1@wso2.com","name":{"givenName":"User","familyName":"One"}}]`,
 	}}
 	ssrv := httptest.NewServer(stub.handler())
 	t.Cleanup(ssrv.Close)
@@ -191,10 +188,10 @@ func TestPreflight_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("preflight: %v", err)
 	}
-	if rd.TeamIDByKey["asg"] != 1 || rd.RoleIDByName[roleRiskManagement] != 12 || rd.ScoreIDByLI[[2]int{3, 3}] != 7 {
+	if rd.TeamIDByKey["asg"] != 1 || rd.RoleIDByName[roleRiskManagement] != 12 || rd.ComplianceIDByName["ISO"] != 2 {
 		t.Fatalf("RefData not fully populated: %+v", rd)
 	}
-	if len(users) != 1 || users[0].Email != "nimali.re@wso2.com" {
+	if len(users) != 1 || users[0].Email != "user1@wso2.com" {
 		t.Fatalf("preflight should return the SCIM snapshot it fetched: %+v", users)
 	}
 }

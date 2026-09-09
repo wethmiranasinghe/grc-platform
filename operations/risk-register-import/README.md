@@ -36,12 +36,12 @@ Every row's added `Workflow Status` column is exactly `IN_REMEDIATION` or
 
 ## Run it
 
-Local (against reachable staging URLs):
+Local (against reachable staging URLs) — copy `.env.example` to `.env`, fill in
+the values, then:
 
-```
-COMPLIANCE_ENTITY_BASE_URL=... \
-SCIM_BASE_URL=https://api.asgardeo.io SCIM_INTERNAL_ORG=wso2 \
-SCIM_INTERNAL_CLIENT_ID=... SCIM_INTERNAL_CLIENT_SECRET=... SCIM_INTERNAL_SCOPES=... \
+```bash
+set -a && source .env && set +a
+
 go run . -input ./risks.csv -migration-date 2026-09-15          # dry run
 
 # ... fix everything the report REJECTs, re-export, repeat ...
@@ -49,10 +49,12 @@ go run . -input ./risks.csv -migration-date 2026-09-15          # dry run
 go run . -input ./risks.csv -migration-date 2026-09-15 -dry-run=false
 ```
 
-`SCIM_TOKEN_URL` is optional — derived as
-`{SCIM_BASE_URL}/t/{SCIM_INTERNAL_ORG}/oauth2/token`. `go run . -h` prints the
-full flag surface; every `.choreo/component.yaml` config key maps to a `Config`
-field in `main.go`.
+`-input`, `-migration-date` and `-dry-run` stay explicit flags on every
+invocation rather than living in `.env` — which CSV, which date, and whether
+this run writes should never be a leftover value from an old file. `go run .
+-h` prints the full flag surface; every `.choreo/component.yaml` config key
+maps to a `Config` field in `main.go`, and `.env`/`.env.example` use the same
+names.
 
 In Choreo: set the config keys in `.choreo/component.yaml`, upload the CSV as
 the `INPUT_PATH` file mount, leave `DRY_RUN=true`, trigger, read the logs; then
@@ -68,27 +70,53 @@ directory access. **Local testing only — never set `SCIM_SNAPSHOT_FILE` in
 Choreo.** When it is set, the `SCIM_INTERNAL_*` config is not required.
 
 ```bash
-# 1. local MySQL
-mysql -e "CREATE DATABASE grc_platform"
-mysql grc_platform < ../../apps/grc-platform/backend/Resources/shared.sql
-mysql grc_platform < ../../apps/grc-platform/backend/Resources/risk_schema.sql
-mysql grc_platform < ../../apps/grc-platform/backend/Resources/shared_seed_data.sql   # risk roles
-mysql grc_platform < <path-to>/risk_module_data_schema.sql                            # teams / categories / refs / scores
+# 1. local MySQL. shared.sql/risk_schema.sql both open with USE grc_platform
+# and no CREATE DATABASE, so the database has to exist first.
+mysql -uroot -p -e "CREATE DATABASE IF NOT EXISTS grc_platform"
+mysql -uroot -p grc_platform < ../../apps/grc-platform/backend/Resources/shared.sql
+mysql -uroot -p grc_platform < ../../apps/grc-platform/backend/Resources/risk_schema.sql
+# risk roles. Must be this file, not the older root staging_shared_seed_data.sql:
+# that one predates the management-role split and still carries the pre-split
+# name grc-platform-management, so preflight aborts on the missing
+# grc-platform-risk-management. Re-running is safe (ON DUPLICATE KEY UPDATE on
+# uq_role_name, and the renames are no-ops once applied), and it fixes a DB
+# seeded from the old file by renaming the role in place, keeping its role_id.
+mysql -uroot -p grc_platform < ../../apps/grc-platform/backend/Resources/shared_seed_data.sql
+# teams / categories / compliance refs / scores. NOT risk_module_data_schema.sql
+# — that file seeds neither risk_team nor risk_score, and buildRefData aborts
+# preflight when any of the four is empty.
+mysql -uroot -p grc_platform < <path-to>/staging_risk_seed_data.sql
 
-# 2. compliance-entity (separate shell, leave running)
+# Run the seed files from the mysql CLI, not MySQL Workbench: Workbench's safe
+# update mode rejects shared_seed_data.sql's `WHERE role_name COLLATE
+# utf8mb4_bin IN (...)` with error 1175 (the COLLATE hides the uq_role_name
+# index from it). `SET SQL_SAFE_UPDATES = 0;` in the same session also works.
+
+# 2. compliance-entity (separate shell, leave running).
+# Back up any .env you already have — this overwrites it.
 cd ../../entity/compliance-entity
-printf 'DB_DSN=root:@tcp(127.0.0.1:3306)/grc_platform?parseTime=true\nSERVER_PORT=8080\n' > .env
+[ -f .env ] && cp .env .env.bak
+# &tls=false is required: internal/db/mysql.go defaults a DSN with no tls= to
+# verified TLS and will not fall back to plaintext, so a local MySQL without
+# TLS just fails to connect.
+printf 'DB_DSN=root:<password>@tcp(127.0.0.1:3306)/grc_platform?parseTime=true&tls=false\nSERVER_PORT=8080\n' > .env
 go run ./cmd/api
 
-# 3. this tool — dry run, then real run
+# sanity-check before going further
+curl -s localhost:8080/health
+curl -s localhost:8080/risk/scores | head -c 200
+
+# 3. this tool — dry run, then real run. Copy .env.example to .env and set
+# COMPLIANCE_ENTITY_BASE_URL=http://localhost:8080; -scim-snapshot stays an
+# explicit flag, not a .env var — it must never leak into a staging/Choreo
+# run, and a flag is harder to leave on by accident than a stray .env value.
 cd ../../operations/risk-register-import
+set -a && source .env && set +a
 IN='<planning-docs>/Risk_Test_Full.xlsx - New Risk Form Structure.csv'
 SNAP='<planning-docs>/scim-snapshot.csv'
 
-COMPLIANCE_ENTITY_BASE_URL=http://localhost:8080 \
 go run . -input "$IN" -scim-snapshot "$SNAP" -migration-date 2026-09-15
 
-COMPLIANCE_ENTITY_BASE_URL=http://localhost:8080 \
 go run . -input "$IN" -scim-snapshot "$SNAP" -migration-date 2026-09-15 -dry-run=false
 ```
 
@@ -98,7 +126,10 @@ Reset with `rollback.sql`; a second real run must be all-`Skipped`.
 The shipped test pair lives in the planning-docs area (out of git):
 `Risk_Test_Full.xlsx - New Risk Form Structure.csv` (5 valid rows: 3
 `IN_REMEDIATION`, 2 `CLOSED`, one `ACCEPT`/high row that also gets the
-management grant) and `scim-snapshot.csv` (its five emails → placeholder uuids).
+management grant) and `scim-snapshot.csv`. Both files use only two real
+people — `wethmi@wso2.com` and `yasirue@wso2.com` — spread across the Risk
+Assigned To / Risk Owner / Management Approver / Action Owner columns, so a
+local run provisions at most those two `user` rows.
 
 ## Report
 

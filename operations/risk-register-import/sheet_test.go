@@ -84,15 +84,15 @@ func TestMapRow_CleanRow(t *testing.T) {
 		"Risk Identified By":            "Employee",
 		"Select Employee/ Name of External Person/ Tool": "Tharushi P",
 		"Risk Identified Date":                           "45667.0",
-		"Risk Assigned To":                               "Nimali.RE@wso2.com",
+		"Risk Assigned To":                               "User1@wso2.com",
 		"Likelihood":                                     "3.0",
 		"Impact":                                         "2.0",
 		"Impact Description":                             "service interruption",
 		"Implementation Date":                            "45838.0",
 		"Reassessment Date":                              "30th Sep 2025",
 		"Assignment Team":                                "Legal",
-		"Risk Owner":                                     "kasun.pe@wso2.com",
-		"Management Approver":                            "asela.ja@wso2.com",
+		"Risk Owner":                                     "user2@wso2.com",
+		"Management Approver":                            "user3@wso2.com",
 		"Action Owner":                                   "",
 		"Action Plan Description":                        "Track to completion",
 		"Action Steps":                                   "Action Item -1\nAction 2",
@@ -135,7 +135,7 @@ func TestMapRow_CleanRow(t *testing.T) {
 	if len(r.ComplianceRefIDs) != 1 || r.ComplianceRefIDs[0] != 6 {
 		t.Errorf("compliance ids: %v (HIPPA should alias to HIPAA id 6)", r.ComplianceRefIDs)
 	}
-	if r.AssignerEmail != "nimali.re@wso2.com" {
+	if r.AssignerEmail != "user1@wso2.com" {
 		t.Errorf("assigner email not lowercased: %q", r.AssignerEmail)
 	}
 	if r.GitIssueURL != "" {

@@ -101,7 +101,11 @@ func main() {
 func loadConfig() (Config, error) {
 	var c Config
 	flag.StringVar(&c.InputPath, "input", envOr("INPUT_PATH", ""), "path to the prepared CSV export")
-	flag.BoolVar(&c.DryRun, "dry-run", envBool("DRY_RUN", true), "validate and report only; do not write")
+	dryRunDefault, err := parseBoolEnv("DRY_RUN", true)
+	if err != nil {
+		return Config{}, err
+	}
+	flag.BoolVar(&c.DryRun, "dry-run", dryRunDefault, "validate and report only; do not write")
 	flag.StringVar(&c.MigrationDate, "migration-date", envOr("MIGRATION_DATE", time.Now().UTC().Format("2006-01-02")),
 		"YYYY-MM-DD used for completed_date / compliance_approval_date on CLOSED rows")
 	flag.StringVar(&c.SCIMDomain, "scim-domain", envOr("SCIM_DOMAIN", "wso2.com"), "email-domain suffix to snapshot from SCIM")
@@ -335,14 +339,22 @@ func envOr(key, def string) string {
 	return def
 }
 
-func envBool(key string, def bool) bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+// parseBoolEnv strictly parses a bool-ish env value. Unlike a permissive
+// parser that maps anything unrecognized to false, an unrecognized non-empty
+// value (a typo, e.g. "flase") is an error, not a silent result — DRY_RUN is
+// the write gate, so a garbled value must fail loud rather than fail toward
+// "write".
+func parseBoolEnv(key string, def bool) (bool, error) {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	switch raw {
 	case "":
-		return def
+		return def, nil
 	case "1", "true", "yes", "y":
-		return true
+		return true, nil
+	case "0", "false", "no", "n":
+		return false, nil
 	default:
-		return false
+		return false, fmt.Errorf("%s=%q is not a recognized boolean (true/false/yes/no/1/0)", key, os.Getenv(key))
 	}
 }
 

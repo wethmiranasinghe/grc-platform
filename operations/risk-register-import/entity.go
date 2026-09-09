@@ -136,7 +136,6 @@ type RefData struct {
 	TeamCodeByID       map[int]string // id -> code ("" when the team has none)
 	CategoryIDByName   map[string]int // lower(name) -> risk_category.id
 	ComplianceIDByName map[string]int // upper(name) -> risk_security_compliance_reference.id
-	ScoreIDByLI        map[[2]int]int // [likelihood,impact] -> risk_score.id (informational; POST /risks resolves it too)
 	RoleIDByName       map[string]int // role_name -> role.id (the three risk roles)
 }
 
@@ -425,7 +424,6 @@ func buildRefData(teams []RiskTeam, cats []RiskCategory, refs []ComplianceRef, s
 		TeamCodeByID:       map[int]string{},
 		CategoryIDByName:   map[string]int{},
 		ComplianceIDByName: map[string]int{},
-		ScoreIDByLI:        map[[2]int]int{},
 		RoleIDByName:       map[string]int{},
 	}
 
@@ -459,10 +457,11 @@ func buildRefData(teams []RiskTeam, cats []RiskCategory, refs []ComplianceRef, s
 	for _, r := range refs {
 		rd.ComplianceIDByName[strings.ToUpper(strings.TrimSpace(r.Name))] = r.ID
 	}
-	for _, s := range scores {
-		rd.ScoreIDByLI[[2]int{s.Likelihood, s.Impact}] = s.ID
-	}
 
+	// scores itself isn't indexed into RefData — POST /risks resolves
+	// gross_score_id server-side from (likelihood, impact) — but its presence
+	// is still a preflight precondition (plan §7): an empty risk_score table
+	// means every create would fail regardless of what the CSV says.
 	if len(teams) == 0 || len(cats) == 0 || len(refs) == 0 || len(scores) == 0 {
 		return RefData{}, fmt.Errorf(
 			"reference data incomplete: teams=%d categories=%d complianceRefs=%d scores=%d (all must be non-empty)",

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -125,7 +126,7 @@ func (r *Report) Emit(w io.Writer) {
 	})
 	for _, f := range sorted {
 		_ = cw.Write([]string{
-			itoa(f.MigrationID), itoa(f.CSVRow), f.RiskTitle, string(f.Severity), f.Failure, f.Detail,
+			strconv.Itoa(f.MigrationID), strconv.Itoa(f.CSVRow), f.RiskTitle, string(f.Severity), f.Failure, f.Detail,
 		})
 	}
 	cw.Flush()
@@ -208,5 +209,3 @@ func (r *Report) emitNarrative(w io.Writer) {
 		fmt.Fprintln(w)
 	}
 }
-
-func itoa(n int) string { return fmt.Sprintf("%d", n) }
