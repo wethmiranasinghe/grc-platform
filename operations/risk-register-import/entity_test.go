@@ -68,7 +68,8 @@ func TestEntityClient_PostSendsJSONBodyAndDecodesResult(t *testing.T) {
 		}
 		var req CreateUserRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("decode body: %v", err)
+			t.Errorf("decode body: %v", err)
+			return
 		}
 		if req.UUID != "abc-123" || req.UserType != "INTERNAL" || req.CreatedBy != marker {
 			t.Errorf("body = %+v", req)
