@@ -62,12 +62,28 @@ flip `DRY_RUN=false` and trigger again.
 
 Exit codes: `0` clean · `2` completed with findings · `1` structural abort.
 
-## Fully local end-to-end (no Asgardeo credentials)
+## Fully local end-to-end
 
-`-scim-snapshot <file>` replaces the live Asgardeo call with an `email,uuid`
-CSV, so the whole pipeline runs against a local entity + local MySQL with no
-directory access. **Local testing only — never set `SCIM_SNAPSHOT_FILE` in
-Choreo.** When it is set, the `SCIM_INTERNAL_*` config is not required.
+Two ways to resolve identity locally, against the same local entity + local
+MySQL either way — pick one:
+
+- **`-scim-snapshot <file>`** — an `email,uuid` CSV read instead of calling
+  Asgardeo. No Asgardeo credentials needed at all. **Local testing only —
+  never set `SCIM_SNAPSHOT_FILE` in Choreo**, and pass it as a flag, not a
+  `.env` var, so it can't leak into a staging/Choreo run by accident. When
+  it's set, the `SCIM_INTERNAL_*` config becomes optional.
+- **A real Asgardeo org** (your own personal/dev org is fine) — set
+  `SCIM_BASE_URL` / `SCIM_INTERNAL_ORG` / `SCIM_INTERNAL_CLIENT_ID` /
+  `SCIM_INTERNAL_CLIENT_SECRET` / `SCIM_INTERNAL_SCOPES`
+  (`internal_user_mgt_view internal_user_mgt_list` — only those two) for real,
+  set `SCIM_DOMAIN` to the **email suffix your org's users actually carry**
+  (not the org name — they're different fields: `SCIM_INTERNAL_ORG` is the
+  Asgardeo tenant path segment that goes in the URL), and drop
+  `-scim-snapshot`. This exercises the real OAuth2 client-credentials +
+  SCIM2 Users API path, not the fake.
+
+Either way, the CSV's four person columns need emails that actually resolve —
+either present in the snapshot file, or real users in the org/domain above.
 
 ```bash
 # 1. local MySQL. shared.sql/risk_schema.sql both open with USE grc_platform
@@ -102,34 +118,50 @@ cd ../../entity/compliance-entity
 printf 'DB_DSN=root:<password>@tcp(127.0.0.1:3306)/grc_platform?parseTime=true&tls=false\nSERVER_PORT=8080\n' > .env
 go run ./cmd/api
 
-# sanity-check before going further
+# 3. confirm the entity is up before every run in this tool — cheap, and it's
+# the fastest way to tell "the entity isn't running" apart from a real config
+# problem when preflight fails.
 curl -s localhost:8080/health
 curl -s localhost:8080/risk/scores | head -c 200
 
-# 3. this tool — dry run, then real run. Copy .env.example to .env and set
-# COMPLIANCE_ENTITY_BASE_URL=http://localhost:8080; -scim-snapshot stays an
-# explicit flag, not a .env var — it must never leak into a staging/Choreo
-# run, and a flag is harder to leave on by accident than a stray .env value.
+# 4. this tool. Copy .env.example to .env, fill in COMPLIANCE_ENTITY_BASE_URL
+# plus whichever identity path you picked above.
 cd ../../operations/risk-register-import
 set -a && source .env && set +a
-IN='<planning-docs>/Risk_Test_Full.xlsx - New Risk Form Structure.csv'
-SNAP='<planning-docs>/scim-snapshot.csv'
+IN=<path-to-your-prepared-register>.csv
 
-go run . -input "$IN" -scim-snapshot "$SNAP" -migration-date 2026-09-15
+go run . -input "$IN" -migration-date 2026-09-15          # dry run
+echo "exit=$?"
 
-go run . -input "$IN" -scim-snapshot "$SNAP" -migration-date 2026-09-15 -dry-run=false
+# ... fix everything the report REJECTs, re-run the dry run, repeat ...
+
+go run . -input "$IN" -migration-date 2026-09-15 -dry-run=false   # real run
+echo "exit=$?"
 ```
 
-Inspect: `SELECT risk_code, workflow_status, treatment_strategy FROM risk WHERE created_by='risk-sheet-migration'`.
-Reset with `rollback.sql`; a second real run must be all-`Skipped`.
+Verify:
 
-The shipped test pair lives in the planning-docs area (out of git):
-`Risk_Test_Full.xlsx - New Risk Form Structure.csv` (5 valid rows: 3
-`IN_REMEDIATION`, 2 `CLOSED`, one `ACCEPT`/high row that also gets the
-management grant) and `scim-snapshot.csv`. Both files use only two real
-people — `wethmi@wso2.com` and `yasirue@wso2.com` — spread across the Risk
-Assigned To / Risk Owner / Management Approver / Action Owner columns, so a
-local run provisions at most those two `user` rows.
+```sql
+SELECT risk_code, workflow_status, treatment_strategy
+FROM risk WHERE created_by='risk-sheet-migration' ORDER BY risk_code;
+
+SELECT COUNT(*) FROM `user`         WHERE created_by='risk-sheet-migration';
+SELECT COUNT(*) FROM risk_escalation  WHERE created_by='risk-sheet-migration';
+SELECT COUNT(*) FROM user_role_grant  WHERE created_by='risk-sheet-migration';
+SELECT COUNT(*) FROM risk_action_plan WHERE created_by='risk-sheet-migration' AND status='COMPLETED';
+```
+
+Then re-run the exact same real-run command once more. Every row must come
+back **Skipped** (`migrated=0 skipped(resume)=N`), and none of the counts
+above may change — this is the resume path, and the property a retriggered
+Choreo Manual Task actually depends on. Reset with `rollback.sql` between
+attempts (it deliberately leaves `user` rows alone — see its header comment;
+delete those separately if you're switching identity source and want a fully
+clean slate).
+
+A `testdata/risks.csv`-shaped register (5 rows: 3 `IN_REMEDIATION`, 2
+`CLOSED`, one `ACCEPT`/high row that also gets the management grant) is a good
+size for a first local pass before trying the real register export.
 
 ## Report
 
