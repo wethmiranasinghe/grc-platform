@@ -20,7 +20,9 @@ USE grc_platform;
 SELECT 'risk'                    AS table_name, COUNT(*) AS rows_to_delete FROM risk                    WHERE created_by = 'risk-sheet-migration'
 UNION ALL SELECT 'risk_escalation',        COUNT(*) FROM risk_escalation        WHERE created_by = 'risk-sheet-migration'
 UNION ALL SELECT 'risk_change_log',        COUNT(*) FROM risk_change_log        WHERE created_by = 'risk-sheet-migration'
-UNION ALL SELECT 'risk_action_step',       COUNT(*) FROM risk_action_step       WHERE created_by = 'risk-sheet-migration'
+UNION ALL SELECT 'risk_action_step',       COUNT(*) FROM risk_action_step step
+          JOIN risk_action_plan plan ON plan.id = step.plan_id
+          WHERE plan.created_by = 'risk-sheet-migration'
 UNION ALL SELECT 'risk_action_plan',       COUNT(*) FROM risk_action_plan       WHERE created_by = 'risk-sheet-migration'
 UNION ALL SELECT 'user_role_grant',        COUNT(*) FROM user_role_grant        WHERE created_by = 'risk-sheet-migration';
 
