@@ -66,8 +66,15 @@ func TestLiveSCIM_ListUsersByDomain(t *testing.T) {
 			"internal_user_mgt_view and internal_user_mgt_list", domain)
 	}
 
-	t.Logf("resolved %d user(s) for @%s:", len(users), domain)
-	for _, u := range users {
+	// Log only a small sample — the directory can be large, and the full dump
+	// would bury the result and spill the whole corporate listing into terminal
+	// scrollback / captured output.
+	const sample = 5
+	t.Logf("resolved %d user(s) for @%s (showing up to %d):", len(users), domain, sample)
+	for i, u := range users {
+		if i == sample {
+			break
+		}
 		t.Logf("  %-30s uuid=%-38s name=%q", u.Email, u.UUID, u.DisplayName)
 	}
 }
