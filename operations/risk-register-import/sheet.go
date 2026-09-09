@@ -116,6 +116,7 @@ func parseSheet(r io.Reader, refs RefData) ([]Row, []Finding, error) {
 
 	var rows []Row
 	var findings []Finding
+	seenID := map[int]int{} // MigrationID -> first CSV line that used it
 	for i, rec := range records[1:] {
 		line := i + 2 // 1-based, past the header
 		if isSkippable(rec, idx) {
@@ -123,6 +124,21 @@ func parseSheet(r io.Reader, refs RefData) ([]Row, []Finding, error) {
 		}
 		row, rf := mapRow(rec, idx, line, refs)
 		findings = append(findings, rf...)
+		// A repeated Migration ID silently collides downstream: reconstructState
+		// keys resume state by it (map[int]ResumeState) and RejectedMigrationIDs
+		// is a map[int]struct{}. REJECT every row that shares an ID — the natural
+		// key check can't catch two genuinely different risks with a mistyped ID.
+		if row.MigrationID != 0 {
+			if first, dup := seenID[row.MigrationID]; dup {
+				findings = append(findings, Finding{
+					MigrationID: row.MigrationID, CSVRow: line, RiskTitle: row.RiskTitle,
+					Severity: SevReject, Failure: "Migration ID",
+					Detail:   fmt.Sprintf("duplicate of the row on line %d", first),
+				})
+			} else {
+				seenID[row.MigrationID] = line
+			}
+		}
 		rows = append(rows, row)
 	}
 	return rows, findings, nil

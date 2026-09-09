@@ -218,6 +218,54 @@ func TestMapRow_MessyRowRejects(t *testing.T) {
 	}
 }
 
+func TestParseSheet_DuplicateMigrationIDRejects(t *testing.T) {
+	// Two otherwise-valid rows that differ on the natural key (title) but share
+	// a Migration ID — the natural-key collision check in reconstructState would
+	// miss this, so parseSheet has to catch it.
+	base := map[string]string{
+		"Year": "2025", "Quarter": "Q3", "Source Register": "Asgardeo",
+		"Security Compliance Reference": "ISO", "Risk Category": "Access Control & Credentials",
+		"Risk Assigned To": "a@wso2.com", "Likelihood": "3", "Impact": "2",
+		"Implementation Date": "45838.0", "Assignment Team": "Legal",
+		"Risk Owner": "b@wso2.com", "Management Approver": "c@wso2.com",
+		"Action Plan Description": "x", "Action Steps": "step 1",
+		"Treatment Strategy": "Accept", "Workflow Status": "IN_REMEDIATION",
+	}
+	rowA := map[string]string{}
+	rowB := map[string]string{}
+	for k, v := range base {
+		rowA[k], rowB[k] = v, v
+	}
+	rowA["Risk Title"], rowA["Migration ID"] = "First risk", "5"
+	rowB["Risk Title"], rowB["Migration ID"] = "Second, unrelated risk", "5"
+
+	rows, fs, err := parseSheet(strings.NewReader(buildCSV(t, rowA, rowB)), sheetTestRefData(t))
+	if err != nil {
+		t.Fatalf("parseSheet: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want 2", len(rows))
+	}
+
+	dup := findingsFor(fs, "Migration ID")
+	if len(dup) != 1 || dup[0].Severity != SevReject {
+		t.Fatalf("want one Migration ID REJECT, got %+v", fs)
+	}
+	if dup[0].CSVRow != 3 || dup[0].MigrationID != 5 {
+		t.Errorf("dup finding = %+v, want CSVRow 3 / MigrationID 5", dup[0])
+	}
+	if !strings.Contains(dup[0].Detail, "line 2") {
+		t.Errorf("detail = %q, want it to point at line 2", dup[0].Detail)
+	}
+
+	// Because RejectedMigrationIDs is keyed by ID, both rows are excluded.
+	rep := NewReport()
+	rep.Add(fs...)
+	if _, bad := rep.RejectedMigrationIDs()[5]; !bad {
+		t.Error("migration id 5 should be in RejectedMigrationIDs")
+	}
+}
+
 func TestParseSheet_SkipsLegendAndBlankRows(t *testing.T) {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
