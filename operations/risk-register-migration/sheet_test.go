@@ -82,7 +82,7 @@ func TestMapRow_CleanRow(t *testing.T) {
 		"Security Compliance Reference": "HIPPA",
 		"Risk Category":                 "Access Control & Credentials",
 		"Risk Identified By":            "Employee",
-		"Select Employee/ Name of External Person/ Tool": "Tharushi P",
+		"Select Employee/ Name of External Person/ Tool": "Employee One",
 		"Risk Identified Date":                           "45667.0",
 		"Risk Assigned To":                               "User1@wso2.com",
 		"Likelihood":                                     "3.0",
