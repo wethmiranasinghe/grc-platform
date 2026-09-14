@@ -185,3 +185,76 @@ func isNotFound(err error) bool {
 	var apiErr *apierror.Error
 	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
 }
+
+// CandidateIDs returns the union of the user ids holding any of privs, GLOBAL
+// only, de-duplicated in first-seen order. A nil Repository returns nothing
+// rather than erroring: a hub wired without grants has no recipients, not a
+// broken one.
+func CandidateIDs(ctx context.Context, r Repository, privs ...string) ([]int, error) {
+	if r == nil {
+		return nil, nil
+	}
+	ids := make([]int, 0, 8)
+	seen := map[int]bool{}
+	for _, p := range privs {
+		candidates, err := r.Candidates(ctx, p, nil)
+		if err != nil {
+			return nil, fmt.Errorf("resolve %s holders: %w", p, err)
+		}
+		for _, c := range candidates {
+			if seen[c.ID] {
+				continue
+			}
+			seen[c.ID] = true
+			ids = append(ids, c.ID)
+		}
+	}
+	return ids, nil
+}
+
+// CandidateIDsAll returns the user ids that hold EVERY one of privs at GLOBAL
+// scope, de-duplicated and kept in the order they appear under the first
+// privilege. No privs, or a nil Repository, returns nothing. Use this where a
+// recipient must clear more than one bar at once — reassigning the work and
+// administering accounts — rather than either alone.
+func CandidateIDsAll(ctx context.Context, r Repository, privs ...string) ([]int, error) {
+	if r == nil || len(privs) == 0 {
+		return nil, nil
+	}
+	// The first privilege sets the pool and its order; each later one can only
+	// narrow it.
+	first, err := r.Candidates(ctx, privs[0], nil)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %s holders: %w", privs[0], err)
+	}
+	pool := make([]int, 0, len(first))
+	seen := map[int]bool{}
+	for _, c := range first {
+		if seen[c.ID] {
+			continue
+		}
+		seen[c.ID] = true
+		pool = append(pool, c.ID)
+	}
+	for _, p := range privs[1:] {
+		if len(pool) == 0 {
+			return nil, nil
+		}
+		candidates, err := r.Candidates(ctx, p, nil)
+		if err != nil {
+			return nil, fmt.Errorf("resolve %s holders: %w", p, err)
+		}
+		has := make(map[int]bool, len(candidates))
+		for _, c := range candidates {
+			has[c.ID] = true
+		}
+		kept := make([]int, 0, len(pool))
+		for _, id := range pool {
+			if has[id] {
+				kept = append(kept, id)
+			}
+		}
+		pool = kept
+	}
+	return pool, nil
+}
