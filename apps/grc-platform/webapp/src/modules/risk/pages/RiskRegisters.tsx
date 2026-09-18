@@ -301,7 +301,9 @@ function FilterBar({
         </Select>
       </FormControl>
 
-      <FormControl sx={{ minWidth: 130 }}>
+      {/* Wide enough for the unshrunk "Residual Level" label to clear the
+          select's dropdown arrow — at 130 the two overlapped. */}
+      <FormControl sx={{ minWidth: 170 }}>
         <InputLabel>Residual Level</InputLabel>
         <Select
           label="Residual Level"
