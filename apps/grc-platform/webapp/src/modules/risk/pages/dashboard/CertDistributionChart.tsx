@@ -18,7 +18,7 @@ import { BarChart } from "@wso2/oxygen-ui-charts-react";
 import { Typography } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { RegisterCertShare } from "../../api/riskApi";
-import { buildCertColorMap, labelColorOn, stackedSegmentAccessor } from "./constants";
+import { CHART_ANIMATION_MS, buildCertColorMap, labelColorOn, stackedSegmentAccessor } from "./constants";
 
 interface CertDistributionChartProps {
   data: RegisterCertShare[];
@@ -69,7 +69,7 @@ export default function CertDistributionChart({
       bars={bars}
       height={340}
       maxBarSize={64}
-      isAnimationActive={false}
+      animationDuration={CHART_ANIMATION_MS}
       margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
       tooltip={{ show: true, formatter: (value) => `${String(value)}%` }}
     />

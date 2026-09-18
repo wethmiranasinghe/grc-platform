@@ -18,6 +18,7 @@ import { BarChart, CartesianGrid, YAxis } from "@wso2/oxygen-ui-charts-react";
 import { Typography, useColorScheme } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { WorkflowStageCount } from "../../api/riskApi";
+import { CHART_ANIMATION_MS } from "../dashboard/constants";
 import { WORKFLOW_FUNNEL_ORDER, WORKFLOW_STAGE_COLOR, WORKFLOW_STATUS_LABELS } from "./constants";
 
 interface WorkflowFunnelChartProps {
@@ -71,7 +72,7 @@ export default function WorkflowFunnelChart({ data }: WorkflowFunnelChartProps):
       bars={[{ dataKey: "count", name: "Risks", fill: WORKFLOW_STAGE_COLOR, radius: [0, 3, 3, 0] }]}
       height={Math.max(MIN_HEIGHT, rows.length * ROW_HEIGHT)}
       maxBarSize={28}
-      isAnimationActive={false}
+      animationDuration={CHART_ANIMATION_MS}
       legend={{ show: false }}
       margin={{ top: 8, right: 24, left: 8, bottom: 8 }}
       xAxis={{ show: true }}

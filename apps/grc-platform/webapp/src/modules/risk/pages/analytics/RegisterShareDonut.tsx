@@ -18,7 +18,7 @@ import { PieChart } from "@wso2/oxygen-ui-charts-react";
 import { Typography } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { RegisterShare } from "../../api/riskApi";
-import { buildRegisterColorMap } from "../dashboard/constants";
+import { CHART_ANIMATION_MS, buildRegisterColorMap } from "../dashboard/constants";
 
 interface RegisterShareDonutProps {
   data: RegisterShare[] | null;
@@ -45,7 +45,7 @@ export default function RegisterShareDonut({ data }: RegisterShareDonutProps): J
       data={rows}
       height={320}
       colors={data.map((d) => colorMap.get(d.register_name)!)}
-      isAnimationActive={false}
+      animationDuration={CHART_ANIMATION_MS}
       pies={[
         {
           dataKey: "value",

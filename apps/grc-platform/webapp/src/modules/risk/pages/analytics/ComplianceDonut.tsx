@@ -18,7 +18,7 @@ import { PieChart } from "@wso2/oxygen-ui-charts-react";
 import { Typography } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { ComplianceShare } from "../../api/riskApi";
-import { buildCertColorMap } from "../dashboard/constants";
+import { CHART_ANIMATION_MS, buildCertColorMap } from "../dashboard/constants";
 
 interface ComplianceDonutProps {
   data: ComplianceShare[];
@@ -45,7 +45,7 @@ export default function ComplianceDonut({ data }: ComplianceDonutProps): JSX.Ele
       data={rows}
       height={320}
       colors={data.map((d) => colorMap.get(d.compliance_name)!)}
-      isAnimationActive={false}
+      animationDuration={CHART_ANIMATION_MS}
       pies={[
         {
           dataKey: "value",

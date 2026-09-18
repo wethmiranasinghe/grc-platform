@@ -19,6 +19,7 @@ import { Box, Typography } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { RegisterTreatmentCount } from "../../api/riskApi";
 import {
+  CHART_ANIMATION_MS,
   TREATMENT_COLORS,
   TREATMENT_LABELS,
   TREATMENT_ORDER,
@@ -33,6 +34,7 @@ interface TreatmentByRegisterChartProps {
 }
 
 const CHART_HEIGHT = 320;
+import ChartDrillDown from "./ChartDrillDown";
 
 // Stacked bar of open risks per BU/register, segmented by treatment strategy.
 // Zero counts are left undefined so recharts skips the segment and its label.
@@ -83,7 +85,7 @@ export default function TreatmentByRegisterChart({
       : undefined,
   }));
 
-  return (
+  const chart = (
     <Box sx={{ display: "flex", alignItems: "stretch", gap: 0.5 }}>
       {/* Custom axis title, centered on the whole chart height (bars + legend)
           rather than recharts' internal plot-only centering, which reads too
@@ -113,11 +115,25 @@ export default function TreatmentByRegisterChart({
           bars={bars}
           height={CHART_HEIGHT}
           maxBarSize={64}
-          isAnimationActive={false}
+          animationDuration={CHART_ANIMATION_MS}
           margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
           yAxis={{ show: true }}
         />
       </Box>
     </Box>
+  );
+
+  if (!onDrillDown) return chart;
+
+  return (
+    <ChartDrillDown what="register and treatment strategy" onDrillDown={onDrillDown} targets={rowsArr.flatMap((row) =>
+        TREATMENT_ORDER.filter((strategy) => row[strategy]).map((strategy) => ({
+          key: `${String(row.registerId)}-${strategy}`,
+          label: `${TREATMENT_LABELS[strategy] ?? strategy} risks in ${String(row.register)}`,
+          filter: { treatment: strategy, teamId: row.registerId as number },
+        })),
+      )}>
+      {chart}
+    </ChartDrillDown>
   );
 }

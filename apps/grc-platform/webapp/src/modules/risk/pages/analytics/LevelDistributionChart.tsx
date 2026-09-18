@@ -18,7 +18,7 @@ import { BarChart } from "@wso2/oxygen-ui-charts-react";
 import { Typography } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { MonthLevelCount } from "../../api/riskApi";
-import { LEVEL_FALLBACK_COLORS, LEVEL_LABELS, LEVEL_ORDER, formatMonthYear } from "../dashboard/constants";
+import { CHART_ANIMATION_MS, LEVEL_FALLBACK_COLORS, LEVEL_LABELS, LEVEL_ORDER, formatMonthYear } from "../dashboard/constants";
 
 interface LevelDistributionChartProps {
   data: MonthLevelCount[];
@@ -63,7 +63,7 @@ export default function LevelDistributionChart({ data }: LevelDistributionChartP
       bars={bars}
       height={CHART_HEIGHT}
       maxBarSize={28}
-      isAnimationActive={false}
+      animationDuration={CHART_ANIMATION_MS}
       margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
       yAxis={{ show: true }}
       legend={{ show: true, align: "center", verticalAlign: "bottom" }}

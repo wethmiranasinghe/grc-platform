@@ -18,7 +18,8 @@ import { BarChart } from "@wso2/oxygen-ui-charts-react";
 import { Typography } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { RiskLevelCount } from "../../api/riskApi";
-import { LEVEL_FALLBACK_COLORS, LEVEL_LABELS, LEVEL_ORDER, type OnDrillDown } from "./constants";
+import { CHART_ANIMATION_MS, LEVEL_FALLBACK_COLORS, LEVEL_LABELS, LEVEL_ORDER, type OnDrillDown } from "./constants";
+import ChartDrillDown from "./ChartDrillDown";
 
 interface LevelCountChartProps {
   data: RiskLevelCount[];
@@ -59,7 +60,7 @@ export default function LevelCountChart({ data, onDrillDown, registerId }: Level
     onClick: onDrillDown ? () => onDrillDown({ level, teamId: registerId || undefined }) : undefined,
   }));
 
-  return (
+  const chart = (
     <BarChart
       data={rows}
       xAxisDataKey="level"
@@ -67,8 +68,24 @@ export default function LevelCountChart({ data, onDrillDown, registerId }: Level
       height={420}
       maxBarSize={64}
       legend={{ show: false }}
-      isAnimationActive={false}
+      animationDuration={CHART_ANIMATION_MS}
       margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
     />
+  );
+
+  if (!onDrillDown) return chart;
+
+  return (
+    <ChartDrillDown
+      what="risk level"
+      onDrillDown={onDrillDown}
+      targets={levels.map((level) => ({
+        key: level,
+        label: `${LEVEL_LABELS[level]} risks`,
+        filter: { level, teamId: registerId || undefined },
+      }))}
+    >
+      {chart}
+    </ChartDrillDown>
   );
 }

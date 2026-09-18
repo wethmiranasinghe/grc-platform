@@ -30,6 +30,20 @@ export interface DrillDownFilter {
 }
 export type OnDrillDown = (filter: DrillDownFilter) => void;
 
+// How long a chart's entry animation runs, for every chart in the module.
+//
+// The library default is 1500ms, which is too long here: most of these charts
+// draw their values as labels on the marks (bar counts, pie percentages), and
+// recharts renders those only once the animation has finished. At the default
+// the numbers are missing for the first second and a half, and a resize
+// restarts the animation, so they blink out again on every window or layout
+// change. Measured at 400ms that gap is ~460ms, which is hard to catch.
+//
+// Charts were previously opted out of animation entirely (isAnimationActive:
+// false), which is the other way to avoid the gap — at the cost of the Risk
+// screens being the only ones in the app whose charts never move.
+export const CHART_ANIMATION_MS = 400;
+
 // Chart palette for the risk dashboard. Categorical hues are assigned in fixed
 // order (never cycled) and were validated for colorblind-safe adjacent-pair
 // separation. Segment labels stay visible because two hues sit below 3:1

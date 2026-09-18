@@ -18,7 +18,7 @@ import { BarChart, Line, YAxis } from "@wso2/oxygen-ui-charts-react";
 import { Box, Typography } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { TrendPoint } from "../../api/riskApi";
-import { formatMonthYear } from "../dashboard/constants";
+import { CHART_ANIMATION_MS, formatMonthYear } from "../dashboard/constants";
 import { AVG_SCORE_COLOR, CLOSED_TREND_COLOR, IDENTIFIED_COLOR } from "./constants";
 
 interface TrendChartProps {
@@ -75,7 +75,7 @@ export default function TrendChart({ data }: TrendChartProps): JSX.Element {
           xAxisDataKey="month"
           height={CHART_HEIGHT}
           maxBarSize={28}
-          isAnimationActive={false}
+          animationDuration={CHART_ANIMATION_MS}
           margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
           yAxis={{ show: true }}
           legend={{ show: true, align: "center", verticalAlign: "bottom" }}
@@ -101,7 +101,7 @@ export default function TrendChart({ data }: TrendChartProps): JSX.Element {
             strokeWidth={2}
             dot={{ r: 3 }}
             connectNulls
-            isAnimationActive={false}
+            animationDuration={CHART_ANIMATION_MS}
           />
         </BarChart>
       </Box>

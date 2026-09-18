@@ -18,7 +18,7 @@ import { LineChart } from "@wso2/oxygen-ui-charts-react";
 import { Box, Typography } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { MonthRegisterCount } from "../../api/riskApi";
-import { buildRegisterColorMap, formatMonthYear } from "../dashboard/constants";
+import { CHART_ANIMATION_MS, buildRegisterColorMap, formatMonthYear } from "../dashboard/constants";
 
 interface RegisterTrendChartProps {
   data: MonthRegisterCount[];
@@ -56,7 +56,6 @@ export default function RegisterTrendChart({ data, emptyMessage }: RegisterTrend
     strokeWidth: 2,
     dot: { r: 3 },
     connectNulls: true,
-    isAnimationActive: false,
   }));
 
   return (
@@ -87,7 +86,7 @@ export default function RegisterTrendChart({ data, emptyMessage }: RegisterTrend
           xAxisDataKey="month"
           lines={lines}
           height={CHART_HEIGHT}
-          isAnimationActive={false}
+          animationDuration={CHART_ANIMATION_MS}
           margin={{ top: 8, right: 16, left: 8, bottom: 0 }}
           yAxis={{ show: true }}
           legend={{ show: true, align: "center", verticalAlign: "bottom" }}

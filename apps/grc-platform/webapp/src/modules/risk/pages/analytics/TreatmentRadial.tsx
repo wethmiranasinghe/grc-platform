@@ -18,7 +18,7 @@ import { RadialBarChart } from "@wso2/oxygen-ui-charts-react";
 import { Typography } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { TreatmentShare } from "../../api/riskApi";
-import { TREATMENT_COLORS, TREATMENT_LABELS, TREATMENT_ORDER } from "../dashboard/constants";
+import { CHART_ANIMATION_MS, TREATMENT_COLORS, TREATMENT_LABELS, TREATMENT_ORDER } from "../dashboard/constants";
 
 interface TreatmentRadialProps {
   data: TreatmentShare[];
@@ -56,7 +56,7 @@ export default function TreatmentRadial({ data }: TreatmentRadialProps): JSX.Ele
           dataKey: "count",
           background: { fill: "rgba(128,128,128,0.08)" },
           cornerRadius: 6,
-          isAnimationActive: false,
+          animationDuration: CHART_ANIMATION_MS,
         },
       ]}
       legend={{ show: true, align: "center", verticalAlign: "bottom" }}
