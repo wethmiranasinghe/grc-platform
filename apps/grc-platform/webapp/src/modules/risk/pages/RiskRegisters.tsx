@@ -699,7 +699,10 @@ export default function RiskRegisters(): JSX.Element {
     setFilters({
       ...EMPTY_FILTERS,
       level: validLevel ? [validLevel] : [],
-      teamId: team && Number.isSafeInteger(Number(team)) ? [Number(team)] : [],
+      // > 0 as well as an integer, matching the riskId check above: ids start
+      // at 1, and RiskDashboard uses 0 for "all registers", so team=0 would
+      // otherwise reach the API as a filter that matches nothing.
+      teamId: team && Number.isSafeInteger(Number(team)) && Number(team) > 0 ? [Number(team)] : [],
       treatmentStrategy: validTreatment ? [validTreatment] : [],
     });
     if (view === "all-stages") {
