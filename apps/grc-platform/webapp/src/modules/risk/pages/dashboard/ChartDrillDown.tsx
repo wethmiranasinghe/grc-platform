@@ -69,9 +69,19 @@ export default function ChartDrillDown({
       }}
     >
       {children}
-      <Box component="ul" aria-label={`Filter Risk Register by ${what}`} sx={{ listStyle: "none", m: 0, p: 0 }}>
+      {/* role="list"/"listitem" look redundant but are not: WebKit strips the
+          implicit list role from a list styled list-style: none (and the
+          inline items push the same way), and with it the aria-label — so
+          VoiceOver, the only screen reader on iOS, would announce neither the
+          group nor its size. Explicit roles keep both. */}
+      <Box
+        component="ul"
+        role="list"
+        aria-label={`Filter Risk Register by ${what}`}
+        sx={{ listStyle: "none", m: 0, p: 0 }}
+      >
         {targets.map((t) => (
-          <Box component="li" key={t.key} sx={{ display: "inline" }}>
+          <Box component="li" role="listitem" key={t.key} sx={{ display: "inline" }}>
             <Box
               component="button"
               type="button"
